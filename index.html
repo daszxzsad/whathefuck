@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anonymous Board</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #fff;
+            min-height: 100vh;
+        }
+        
+        /* Splash Screen */
+        #splash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            animation: fadeOut 1s forwards;
+            animation-delay: 1s;
+        }
+
+        #splash img {
+            width: 300px;
+            height: auto;
+            animation: glitch 0.3s infinite;
+        }
+
+        #splash h1 {
+            margin-top: 30px;
+            font-size: 2.5em;
+            letter-spacing: 5px;
+            animation: flicker 1.5s infinite;
+        }
+
+        @keyframes fadeOut {
+            to {
+                opacity: 0;
+                visibility: hidden;
+            }
+        }
+
+        @keyframes glitch {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        #root {
+            opacity: 0;
+            animation: fadeIn 1s forwards;
+            animation-delay: 2s;
+        }
+        
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .card {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            background: #222;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .btn:hover {
+            background: #333;
+            border-color: #666;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: #000;
+            border-color: #333;
+        }
+        
+        .btn-danger {
+            background: #400;
+            border-color: #600;
+        }
+        
+        .btn-danger:hover {
+            background: #600;
+            border-color: #800;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            font-size: 1rem;
+            margin-top: 8px;
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #fff;
+        }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #555;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        .header {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            text-align: center;
+            font-size: 2em;
+            letter-spacing: 3px;
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px #fff;
+        }
+        
+        .header p {
+            text-align: center;
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+        
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .header-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .timer-container {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .timer-box {
+            background: #111;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #222;
+        }
+        
+        @media (max-width: 600px) {
+            .header-buttons {
+                grid-template-columns: 1fr;
+            }
+            
+            .timer-container {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+        }
+        
+        .post {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .post:hover {
+            border-color: #555;
+            box-shadow: 0 0 10px rgba(255,255,255,0.1);
+        }
+        
+        .post-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+        
+        .post-meta {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+        
+        .post-content {
+            color: #aaa;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+        
+        .comment {
+            background: #0a0a0a;
+            border-left: 2px solid #333;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        
+        .modal-content {
+            background: #111;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .modal-content h2 {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        
+        .info-box {
+            background: #001a33;
+            border-left: 4px solid #0066cc;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        
+        .warning-box {
+            background: #2a1a00;
+            border-left: 4px solid #ff8800;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        
+        .revealed-tag {
+            display: inline-block;
+            background: #600;
+            color: #f88;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-left: 10px;
+        }
+        
+        .known-identity {
+            background: #004400;
+            color: #8f8;
+            padding: 8px 16px;
+            border-radius: 4px;
+            margin: 10px 5px 10px 0;
+            display: inline-block;
+        }
+        
+        .login-container {
+            max-width: 500px;
+            margin: 100px auto;
+            padding: 20px;
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .login-header h1 {
+            font-size: 2em;
+            letter-spacing: 3px;
+            margin-bottom: 10px;
+        }
+        
+        .login-card {
+            background: #111;
+            border: 2px solid #333;
+            padding: 30px;
+            border-radius: 8px;
+        }
+        
+        .login-card h2 {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        
+        .login-card label {
+            display: block;
+            color: #888;
+            margin: 15px 0 5px;
+        }
+        
+        label {
+            display: block;
+            color: #888;
+            margin: 15px 0 5px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Splash Screen -->
+    <div id="splash">
+        <img src="/mnt/user-data/uploads/1770935396330_image.png" alt="Anonymous">
+        <h1>WE ARE ANONYMOUS</h1>
+    </div>
+    
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Firebase 설정
+        const firebaseConfig = {
+            apiKey: "AIzaSyAwW-4r34LivVZAB3Z4PtB_5BFeLFfS1s",
+            authDomain: "ikmyeonggay.firebaseapp.com",
+            databaseURL: "https://ikmyeonggay-default-rtdb.firebaseio.com",
+            projectId: "ikmyeonggay",
+            storageBucket: "ikmyeonggay.firebasestorage.app",
+            messagingSenderId: "761175876587",
+            appId: "1:761175876587:web:48b062812fc20d75b36fae",
+            measurementId: "G-HDJB6TCZ2C"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Firebase 연결 상태 확인
+        db.ref('.info/connected').on('value', (snap) => {
+            if (snap.val() === true) {
+                console.log('✅ Firebase 연결됨');
+            } else {
+                console.log('❌ Firebase 연결 안 됨');
+            }
+        });
+
+        // 8명의 계정
+        const ACCOUNTS = {
+            'user1': { name: '강신우', password: btoa('Anon!2024#Kang') },
+            'user2': { name: '김대웅', password: btoa('Shad0w@Kim!24') },
+            'user3': { name: '김민기', password: btoa('Dark#Mind2024!') },
+            'user4': { name: '김민호', password: btoa('Gh0st$Minho@') },
+            'user5': { name: '송민수', password: btoa('Echo!Song#2024') },
+            'user6': { name: '손을웅', password: btoa('Cipher@Son!24') },
+            'user7': { name: '김명진', password: btoa('Wraith#Kim2024') },
+            'user8': { name: '김충연', password: btoa('Admin!@Ghost24') }
+        };
+
+        function App() {
+            const [currentUser, setCurrentUser] = useState(null);
+            const [users, setUsers] = useState({});
+            const [posts, setPosts] = useState([]);
+            const [showWriteModal, setShowWriteModal] = useState(false);
+            const [showPostModal, setShowPostModal] = useState(false);
+            const [showGuessModal, setShowGuessModal] = useState(false);
+            const [showNicknameModal, setShowNicknameModal] = useState(false);
+            const [showPasswordModal, setShowPasswordModal] = useState(false);
+            const [selectedPost, setSelectedPost] = useState(null);
+            const [todayGuess, setTodayGuess] = useState(null);
+            const [currentTime, setCurrentTime] = useState(Date.now());
+
+            // 1초마다 현재 시간 업데이트 (타이머용)
+            useEffect(() => {
+                const timer = setInterval(() => {
+                    setCurrentTime(Date.now());
+                }, 1000);
+                return () => clearInterval(timer);
+            }, []);
+
+            // 로그인 체크
+            useEffect(() => {
+                const userId = localStorage.getItem('userId');
+                if (userId && ACCOUNTS[userId]) {
+                    setCurrentUser({ userId, ...ACCOUNTS[userId] });
+                    loadUserData(userId);
+                }
+            }, []);
+
+            // 사용자 데이터 로드
+            const loadUserData = (userId) => {
+                db.ref('users').on('value', snap => {
+                    const data = snap.val() || {};
+                    setUsers(data);
+                    
+                    if (data[userId]) {
+                        // 2시간마다 지목권 자동 지급
+                        const lastTicketTime = data[userId].lastGuessTicketTime || 0;
+                        const now = Date.now();
+                        const twoHours = 2 * 60 * 60 * 1000;
+                        
+                        if (now - lastTicketTime >= twoHours) {
+                            const currentTickets = data[userId].guessTickets || 0;
+                            db.ref(`users/${userId}`).update({
+                                guessTickets: currentTickets + 1,
+                                lastGuessTicketTime: now
+                            });
+                        }
+                        
+                        // 2시간 주기 정체 초기화 체크 (00:00, 02:00, 04:00, 06:00, 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00)
+                        const lastIdentityReset = data[userId].lastIdentityReset || 0;
+                        const koreaTime = new Date(now + (9 * 60 * 60 * 1000)); // 한국 시간
+                        const currentHour = koreaTime.getUTCHours();
+                        const currentTwoHourSlot = Math.floor(currentHour / 2); // 0~11 (00:00~02:00는 0, 02:00~04:00는 1...)
+                        const slotStartTime = new Date(koreaTime.getUTCFullYear(), koreaTime.getUTCMonth(), koreaTime.getUTCDate(), currentTwoHourSlot * 2, 0, 0).getTime() - (9 * 60 * 60 * 1000);
+                        
+                        if (lastIdentityReset < slotStartTime) {
+                            // 정체 정보 초기화 (본인이 알고 있는 정보만)
+                            db.ref(`users/${userId}`).update({
+                                lastIdentityReset: now,
+                                alreadyGuessedCorrect: []  // 맞춘 사람 목록 초기화
+                            });
+                            
+                            // 모든 사용자의 revealedTo에서 현재 사용자 제거
+                            Object.keys(data).forEach(uid => {
+                                if (data[uid].revealedTo && data[uid].revealedTo.includes(userId)) {
+                                    const newRevealedTo = data[uid].revealedTo.filter(id => id !== userId);
+                                    db.ref(`users/${uid}/revealedTo`).set(newRevealedTo);
+                                }
+                            });
+                        }
+                    }
+                });
+
+                // 오늘의 지목 확인 제거 (이제 지목권 시스템 사용)
+                setTodayGuess(null);
+            };
+
+            // 게시글 로드
+            useEffect(() => {
+                db.ref('posts').on('value', snap => {
+                    const data = snap.val();
+                    if (data) {
+                        const arr = Object.keys(data).map(k => ({
+                            id: k,
+                            ...data[k]
+                        })).sort((a, b) => b.timestamp - a.timestamp);
+                        setPosts(arr);
+                    } else {
+                        setPosts([]);
+                    }
+                });
+            }, []);
+
+            // 닉네임 미설정 시 자동 모달
+            useEffect(() => {
+                if (currentUser && users[currentUser.userId]) {
+                    if (!users[currentUser.userId].nickname) {
+                        setShowNicknameModal(true);
+                    }
+                }
+            }, [currentUser, users]);
+
+            // 로그인
+            const login = (userId, password) => {
+                if (!ACCOUNTS[userId]) {
+                    alert('존재하지 않는 계정입니다!');
+                    return;
+                }
+                
+                // Firebase에서 비밀번호 확인
+                db.ref(`users/${userId}/password`).once('value').then(snap => {
+                    const savedPassword = snap.val() || ACCOUNTS[userId].password;
+                    
+                    if (savedPassword !== btoa(password)) {
+                        alert('비밀번호가 틀렸습니다!');
+                        return;
+                    }
+
+                    localStorage.setItem('userId', userId);
+                    setCurrentUser({ userId, ...ACCOUNTS[userId] });
+                    loadUserData(userId);
+
+                    // 사용자 초기화 (없으면 생성)
+                    db.ref(`users/${userId}`).once('value').then(snap => {
+                        if (!snap.val()) {
+                            console.log('새 사용자 생성:', userId);
+                            return db.ref(`users/${userId}`).set({
+                                name: ACCOUNTS[userId].name,
+                                nickname: '',
+                                nicknameChangedAt: 0,
+                                nicknameChangeTickets: 0,
+                                guessTickets: 1,
+                                lastGuessTicketTime: Date.now(),
+                                lastIdentityReset: Date.now(),
+                                alreadyGuessedCorrect: [],
+                                revealedTo: [],
+                                isPubliclyRevealed: false,
+                                password: ACCOUNTS[userId].password
+                            }).then(() => {
+                                setShowNicknameModal(true);
+                            });
+                        } else {
+                            console.log('기존 사용자 로드:', userId);
+                            // 기존 사용자에게 필드가 없으면 추가
+                            if (snap.val().nicknameChangeTickets === undefined) {
+                                db.ref(`users/${userId}/nicknameChangeTickets`).set(0);
+                            }
+                            if (snap.val().guessTickets === undefined) {
+                                db.ref(`users/${userId}/guessTickets`).set(1);
+                            }
+                            if (snap.val().lastGuessTicketTime === undefined) {
+                                db.ref(`users/${userId}/lastGuessTicketTime`).set(Date.now());
+                            }
+                            if (snap.val().lastIdentityReset === undefined) {
+                                db.ref(`users/${userId}/lastIdentityReset`).set(Date.now());
+                            }
+                            if (snap.val().alreadyGuessedCorrect === undefined) {
+                                db.ref(`users/${userId}/alreadyGuessedCorrect`).set([]);
+                            }
+                            if (!snap.val().nickname || snap.val().nickname === '') {
+                                setShowNicknameModal(true);
+                            }
+                        }
+                    }).catch(error => {
+                        console.error('사용자 초기화 실패:', error);
+                        alert('Firebase 연결 실패!\n\n' + error.message + '\n\nFirebase 규칙을 확인해주세요!');
+                    });
+                }).catch(error => {
+                    console.error('로그인 실패:', error);
+                    alert('로그인 실패: ' + error.message);
+                });
+            };
+
+            // 로그아웃
+            const logout = () => {
+                localStorage.removeItem('userId');
+                setCurrentUser(null);
+            };
+
+            // 닉네임 변경 가능 여부 확인 (티켓 있으면 항상 가능, 없으면 2시간마다)
+            const canChangeNickname = () => {
+                if (!currentUser || !users[currentUser.userId]) return false;
+                
+                // 티켓이 있으면 무조건 가능
+                const tickets = users[currentUser.userId].nicknameChangeTickets || 0;
+                if (tickets > 0) return true;
+                
+                // 티켓이 없으면 2시간 제한
+                const lastChanged = users[currentUser.userId].nicknameChangedAt || 0;
+                const now = Date.now();
+                const twoHours = 2 * 60 * 60 * 1000; // 2시간
+                return now - lastChanged >= twoHours;
+            };
+
+            // 닉네임 변경
+            const changeNickname = (newNickname) => {
+                if (!newNickname.trim()) {
+                    alert('닉네임을 입력하세요!');
+                    return;
+                }
+                
+                const tickets = users[currentUser.userId].nicknameChangeTickets || 0;
+                const updates = {
+                    nickname: newNickname.trim(),
+                    nicknameChangedAt: Date.now(),
+                    revealedTo: [],  // 정체 정보 초기화
+                    isPubliclyRevealed: false,  // 공개 상태 초기화
+                    alreadyGuessedCorrect: []  // 맞춘 사람 목록 초기화
+                };
+                
+                // 티켓이 있으면 소모
+                if (tickets > 0) {
+                    updates.nicknameChangeTickets = tickets - 1;
+                }
+                
+                db.ref(`users/${currentUser.userId}`).update(updates);
+                
+                // 다른 모든 사용자의 alreadyGuessedCorrect에서 내 userId 제거
+                Object.keys(users).forEach(uid => {
+                    if (uid !== currentUser.userId && users[uid].alreadyGuessedCorrect) {
+                        const alreadyGuessed = users[uid].alreadyGuessedCorrect;
+                        if (alreadyGuessed.includes(currentUser.userId)) {
+                            const newList = alreadyGuessed.filter(id => id !== currentUser.userId);
+                            db.ref(`users/${uid}/alreadyGuessedCorrect`).set(newList);
+                        }
+                    }
+                });
+                
+                setShowNicknameModal(false);
+                
+                if (tickets > 0) {
+                    alert(`닉네임이 설정되었습니다! (변경권 ${tickets - 1}개 남음)\n정체가 초기화되어 다시 익명 상태가 되었습니다!`);
+                } else {
+                    alert('닉네임이 설정되었습니다!\n정체가 초기화되어 다시 익명 상태가 되었습니다!');
+                }
+            };
+
+            // 비밀번호 변경
+            const changePassword = (currentPassword, newPassword, confirmPassword) => {
+                // 현재 비밀번호 확인
+                db.ref(`users/${currentUser.userId}/password`).once('value').then(snap => {
+                    const savedPassword = snap.val() || ACCOUNTS[currentUser.userId].password;
+                    
+                    if (btoa(currentPassword) !== savedPassword) {
+                        alert('현재 비밀번호가 일치하지 않습니다!');
+                        return;
+                    }
+                    
+                    if (!newPassword || newPassword.length < 8) {
+                        alert('새 비밀번호는 8자 이상이어야 합니다!');
+                        return;
+                    }
+                    
+                    if (newPassword !== confirmPassword) {
+                        alert('새 비밀번호가 일치하지 않습니다!');
+                        return;
+                    }
+                    
+                    // 비밀번호 변경
+                    db.ref(`users/${currentUser.userId}`).update({
+                        password: btoa(newPassword)
+                    }).then(() => {
+                        setShowPasswordModal(false);
+                        alert('비밀번호가 변경되었습니다!');
+                    });
+                });
+            };
+
+            // 지목하기
+            const makeGuess = (targetUserId) => {
+                if (targetUserId === currentUser.userId) {
+                    alert('자기 자신은 지목할 수 없습니다!');
+                    return;
+                }
+
+                const guessTickets = users[currentUser.userId].guessTickets || 0;
+                if (guessTickets <= 0) {
+                    alert('지목권이 없습니다! 2시간마다 1개씩 지급됩니다.');
+                    return;
+                }
+
+                const selectedUser = document.getElementById('guessSelect').value;
+
+                if (!selectedUser) {
+                    alert('추측할 사람을 선택하세요!');
+                    return;
+                }
+
+                const correct = selectedUser === targetUserId;
+
+                if (correct) {
+                    // 맞춤: 타겟의 정체를 나에게만 공개, 지목권 유지
+                    db.ref(`users/${targetUserId}/revealedTo`).once('value', snap => {
+                        const revealedTo = snap.val() || [];
+                        if (!revealedTo.includes(currentUser.userId)) {
+                            revealedTo.push(currentUser.userId);
+                            db.ref(`users/${targetUserId}/revealedTo`).set(revealedTo);
+                        }
+                    });
+                    
+                    // 이미 맞춘 사람 목록에 추가
+                    db.ref(`users/${currentUser.userId}/alreadyGuessedCorrect`).once('value', snap => {
+                        const alreadyGuessed = snap.val() || [];
+                        if (!alreadyGuessed.includes(targetUserId)) {
+                            alreadyGuessed.push(targetUserId);
+                            db.ref(`users/${currentUser.userId}/alreadyGuessedCorrect`).set(alreadyGuessed);
+                        }
+                    });
+                    
+                    // 닉네임 변경권 2장 추가
+                    db.ref(`users/${currentUser.userId}/nicknameChangeTickets`).once('value', snap => {
+                        const currentTickets = snap.val() || 0;
+                        db.ref(`users/${currentUser.userId}/nicknameChangeTickets`).set(currentTickets + 2);
+                    });
+                    
+                    alert(`정답입니다! ${ACCOUNTS[targetUserId].name}님의 정체를 알게 되었습니다!\n닉네임 변경권 2장을 획득했습니다!\n지목권은 소모되지 않았습니다.`);
+                } else {
+                    // 틀림: 내 정체를 전체 공개, 지목권 소모
+                    db.ref(`users/${currentUser.userId}`).update({
+                        isPubliclyRevealed: true,
+                        guessTickets: guessTickets - 1
+                    });
+                    alert(`틀렸습니다! 당신의 정체가 모두에게 공개됩니다!\n지목권 1개가 소모되었습니다. (남은 지목권: ${guessTickets - 1}개)`);
+                }
+
+                setShowGuessModal(false);
+            };
+
+            // 게시글 작성
+            const writePost = (title, content) => {
+                if (!title.trim() || !content.trim()) {
+                    alert('제목과 내용을 입력하세요!');
+                    return;
+                }
+
+                const currentNickname = users[currentUser.userId]?.nickname || '';
+                if (!currentNickname) {
+                    alert('닉네임을 먼저 설정해주세요!');
+                    setShowWriteModal(false);
+                    setShowNicknameModal(true);
+                    return;
+                }
+
+                const postId = Date.now().toString();
+
+                db.ref(`posts/${postId}`).set({
+                    authorId: currentUser.userId,
+                    nickname: currentNickname,
+                    title: title.trim(),
+                    content: content.trim(),
+                    timestamp: Date.now()
+                }).then(() => {
+                    setShowWriteModal(false);
+                    alert('게시글이 작성되었습니다!');
+                }).catch((error) => {
+                    alert('게시글 작성 실패: ' + error.message);
+                });
+            };
+
+            // 댓글 작성
+            const writeComment = (postId, content) => {
+                if (!content.trim()) {
+                    alert('댓글 내용을 입력하세요!');
+                    return;
+                }
+
+                const currentNickname = users[currentUser.userId]?.nickname || '';
+                if (!currentNickname) {
+                    alert('닉네임을 먼저 설정해주세요!');
+                    setShowPostModal(false);
+                    setShowNicknameModal(true);
+                    return;
+                }
+
+                const commentId = Date.now().toString();
+
+                db.ref(`posts/${postId}/comments/${commentId}`).set({
+                    authorId: currentUser.userId,
+                    nickname: currentNickname,
+                    content: content.trim(),
+                    timestamp: Date.now()
+                }).then(() => {
+                    console.log('댓글 작성 성공!');
+                }).catch((error) => {
+                    alert('댓글 작성 실패: ' + error.message);
+                });
+            };
+
+            // 초기화 (김충연만)
+            const resetAllData = () => {
+                if (currentUser.userId !== 'user8') {
+                    alert('권한이 없습니다!');
+                    return;
+                }
+                if (!confirm('정말로 모든 데이터를 초기화하시겠습니까?')) return;
+                if (!confirm('이 작업은 되돌릴 수 없습니다!')) return;
+                
+                db.ref('posts').remove();
+                db.ref('users').remove();
+                db.ref('guesses').remove();
+                alert('모든 데이터가 초기화되었습니다.');
+                logout();
+            };
+
+            // 내가 알고 있는 정체들
+            const getKnownIdentities = () => {
+                if (!currentUser) return [];
+                const known = [];
+                Object.keys(users).forEach(uid => {
+                    const user = users[uid];
+                    if (user.isPubliclyRevealed) {
+                        known.push({ userId: uid, name: ACCOUNTS[uid].name, type: 'public' });
+                    } else if (user.revealedTo && user.revealedTo.includes(currentUser.userId)) {
+                        known.push({ userId: uid, name: ACCOUNTS[uid].name, type: 'private' });
+                    }
+                });
+                return known;
+            };
+
+            // 남은 시간 포맷 (시:분:초)
+            const formatTimeRemaining = (milliseconds) => {
+                if (milliseconds <= 0) return '갱신 가능';
+                
+                const totalSeconds = Math.floor(milliseconds / 1000);
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            };
+
+            // 닉네임 변경 타이머
+            const getNicknameChangeTimer = () => {
+                if (!currentUser || !users[currentUser.userId]) return '계산중...';
+                const tickets = users[currentUser.userId].nicknameChangeTickets || 0;
+                if (tickets > 0) return '변경권 보유';
+                
+                const lastChanged = users[currentUser.userId].nicknameChangedAt || 0;
+                const twoHours = 2 * 60 * 60 * 1000;
+                const nextChangeTime = lastChanged + twoHours;
+                const remaining = nextChangeTime - currentTime;
+                
+                return formatTimeRemaining(remaining);
+            };
+
+            // 지목권 타이머
+            const getGuessTicketTimer = () => {
+                if (!currentUser || !users[currentUser.userId]) return '계산중...';
+                
+                const lastTicketTime = users[currentUser.userId].lastGuessTicketTime || 0;
+                const twoHours = 2 * 60 * 60 * 1000;
+                const nextTicketTime = lastTicketTime + twoHours;
+                const remaining = nextTicketTime - currentTime;
+                
+                return formatTimeRemaining(remaining);
+            };
+
+            // 정체 초기화 타이머 (00:00, 02:00, 04:00, ...)
+            const getIdentityResetTimer = () => {
+                const now = currentTime;
+                const koreaTime = new Date(now + (9 * 60 * 60 * 1000)); // 한국 시간
+                const currentHour = koreaTime.getUTCHours();
+                const currentMinute = koreaTime.getUTCMinutes();
+                const currentSecond = koreaTime.getUTCSeconds();
+                
+                // 다음 2시간 슬롯 계산
+                const nextSlotHour = Math.ceil((currentHour + 1) / 2) * 2;
+                const hoursUntilNext = (nextSlotHour - currentHour - 1 + 24) % 24;
+                const minutesUntilNext = 60 - currentMinute;
+                const secondsUntilNext = 60 - currentSecond;
+                
+                const totalSeconds = hoursUntilNext * 3600 + minutesUntilNext * 60 + secondsUntilNext;
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            };
+
+            if (!currentUser) {
+                return <LoginScreen onLogin={login} />;
+            }
+
+            const myNickname = users[currentUser.userId]?.nickname || '';
+            const knownIdentities = getKnownIdentities();
+            const nicknameTickets = users[currentUser.userId]?.nicknameChangeTickets || 0;
+            const guessTickets = users[currentUser.userId]?.guessTickets || 0;
+
+            return (
+                <div className="container">
+                    <div className="header">
+                        <h1>ANONYMOUS BOARD</h1>
+                        <p>We do not forgive. We do not forget. Expect us.</p>
+                        <div className="header-top">
+                            <span style={{color: users[currentUser.userId]?.isPubliclyRevealed ? '#f88' : '#8f8'}}>
+                                {users[currentUser.userId]?.isPubliclyRevealed 
+                                    ? `⚠ 당신의 정체는 공개되었습니다 (실명: ${currentUser.name})`
+                                    : `✓ 당신의 정체는 안전합니다 (실명: ${currentUser.name})`
+                                }
+                            </span>
+                        </div>
+                        <div className="timer-container">
+                            <div className="timer-box">
+                                <div style={{color: '#8f8', marginBottom: '5px', fontWeight: 'bold'}}>
+                                    🎫 닉네임 변경권: {nicknameTickets}개
+                                </div>
+                                <div style={{color: '#888', fontSize: '0.85em'}}>
+                                    다음 갱신: {getNicknameChangeTimer()}
+                                </div>
+                            </div>
+                            <div className="timer-box">
+                                <div style={{color: guessTickets > 0 ? '#8f8' : '#f88', marginBottom: '5px', fontWeight: 'bold'}}>
+                                    🎯 지목권: {guessTickets}개
+                                </div>
+                                <div style={{color: '#888', fontSize: '0.85em'}}>
+                                    다음 갱신: {getGuessTicketTimer()}
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{
+                            background: '#0a0a0a',
+                            border: '1px solid #333',
+                            padding: '12px',
+                            marginBottom: '15px',
+                            borderRadius: '4px',
+                            textAlign: 'center'
+                        }}>
+                            <div style={{color: '#8f8', marginBottom: '3px', fontWeight: 'bold'}}>
+                                🔄 정체 정보 초기화
+                            </div>
+                            <div style={{color: '#888', fontSize: '0.85em'}}>
+                                다음 초기화: {getIdentityResetTimer()} (2시간마다)
+                            </div>
+                        </div>
+                        <div className="header-buttons">
+                            <button className="btn" onClick={() => setShowNicknameModal(true)}>
+                                닉네임 변경
+                            </button>
+                            <button className="btn" onClick={() => setShowPasswordModal(true)}>
+                                비밀번호 변경
+                            </button>
+                            <button 
+                                className="btn" 
+                                onClick={() => setShowGuessModal(true)}
+                                disabled={guessTickets <= 0}
+                            >
+                                {guessTickets > 0 ? '지목하기' : '지목권 없음'}
+                            </button>
+                            <button className="btn btn-secondary" onClick={logout}>
+                                로그아웃
+                            </button>
+                        </div>
+                        {currentUser.userId === 'user8' && (
+                            <button 
+                                className="btn btn-danger" 
+                                onClick={resetAllData}
+                                style={{marginTop: '10px'}}
+                            >
+                                🗑 모든 데이터 초기화 (관리자 전용)
+                            </button>
+                        )}
+                    </div>
+
+                    {knownIdentities.length > 0 && (
+                        <div className="card">
+                            <h3 style={{marginBottom: '15px'}}>🔍 내가 알고 있는 정체들</h3>
+                            {knownIdentities.map(k => (
+                                <span key={k.userId} className="known-identity">
+                                    {users[k.userId]?.nickname || '???'} = {k.name}
+                                    {k.type === 'public' && ' (전체공개)'}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
+                    <button className="btn" onClick={() => setShowWriteModal(true)}>
+                        새 글 작성
+                    </button>
+
+                    <div>
+                        {posts.map(post => {
+                            const author = users[post.authorId];
+                            const isRevealed = author?.isPubliclyRevealed || 
+                                             (author?.revealedTo && author.revealedTo.includes(currentUser.userId));
+                            const displayName = isRevealed 
+                                ? `${post.nickname} (${ACCOUNTS[post.authorId]?.name})`
+                                : post.nickname;
+
+                            const comments = post.comments ? Object.values(post.comments).sort((a, b) => a.timestamp - b.timestamp) : [];
+                            const recentComments = comments.slice(-2); // 최근 2개
+
+                            return (
+                                <div 
+                                    key={post.id} 
+                                    className="post"
+                                    onClick={() => {
+                                        setSelectedPost(post);
+                                        setShowPostModal(true);
+                                    }}
+                                >
+                                    <div className="post-title">{post.title}</div>
+                                    <div className="post-meta">
+                                        작성자: {displayName}
+                                        {isRevealed && <span className="revealed-tag">정체공개</span>}
+                                        {' • '}
+                                        {new Date(post.timestamp).toLocaleString('ko-KR')}
+                                    </div>
+                                    <div className="post-content">
+                                        {post.content.length > 100 
+                                            ? post.content.substring(0, 100) + '...'
+                                            : post.content
+                                        }
+                                    </div>
+                                    {comments.length > 0 && (
+                                        <div style={{
+                                            marginTop: '15px',
+                                            padding: '10px',
+                                            background: '#0a0a0a',
+                                            borderLeft: '2px solid #333',
+                                            borderRadius: '4px'
+                                        }}>
+                                            <div style={{color: '#888', fontSize: '0.9rem', marginBottom: '8px'}}>
+                                                💬 댓글 {comments.length}개
+                                            </div>
+                                            {recentComments.map(comment => {
+                                                const cAuthor = users[comment.authorId];
+                                                const cIsRevealed = cAuthor?.isPubliclyRevealed || 
+                                                                  (cAuthor?.revealedTo && cAuthor.revealedTo.includes(currentUser.userId));
+                                                const cDisplayName = cIsRevealed 
+                                                    ? `${comment.nickname} (${ACCOUNTS[comment.authorId]?.name})`
+                                                    : comment.nickname;
+
+                                                return (
+                                                    <div key={comment.timestamp} style={{
+                                                        color: '#777',
+                                                        fontSize: '0.85rem',
+                                                        padding: '5px 0',
+                                                        borderBottom: '1px solid #111'
+                                                    }}>
+                                                        <span style={{color: '#999', fontWeight: 'bold'}}>
+                                                            {cDisplayName}:
+                                                        </span> {comment.content.length > 50 ? comment.content.substring(0, 50) + '...' : comment.content}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {showWriteModal && (
+                        <WriteModal 
+                            onClose={() => setShowWriteModal(false)}
+                            onSubmit={writePost}
+                        />
+                    )}
+
+                    {showPostModal && selectedPost && (
+                        <PostModal 
+                            post={selectedPost}
+                            users={users}
+                            currentUser={currentUser}
+                            ACCOUNTS={ACCOUNTS}
+                            onClose={() => setShowPostModal(false)}
+                            onComment={writeComment}
+                        />
+                    )}
+
+                    {showGuessModal && (
+                        <GuessModal 
+                            users={users}
+                            currentUser={currentUser}
+                            ACCOUNTS={ACCOUNTS}
+                            onClose={() => setShowGuessModal(false)}
+                            onSubmit={makeGuess}
+                        />
+                    )}
+
+                    {showNicknameModal && (
+                        <NicknameModal 
+                            currentNickname={myNickname}
+                            canChange={canChangeNickname()}
+                            tickets={nicknameTickets}
+                            onClose={() => myNickname ? setShowNicknameModal(false) : null}
+                            onSubmit={changeNickname}
+                        />
+                    )}
+
+                    {showPasswordModal && (
+                        <PasswordModal 
+                            onClose={() => setShowPasswordModal(false)}
+                            onSubmit={changePassword}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        function LoginScreen({ onLogin }) {
+            const [userId, setUserId] = useState('');
+            const [password, setPassword] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onLogin(userId, password);
+            };
+
+            return (
+                <div className="login-container">
+                    <div className="login-header">
+                        <h1>ANONYMOUS LOGIN</h1>
+                    </div>
+                    <div className="login-card">
+                        <h2>로그인</h2>
+                        <form onSubmit={handleSubmit}>
+                            <label>아이디</label>
+                            <input 
+                                type="text" 
+                                value={userId}
+                                onChange={(e) => setUserId(e.target.value)}
+                                placeholder="아이디를 입력하세요"
+                            />
+                            <label>비밀번호</label>
+                            <input 
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="비밀번호를 입력하세요"
+                            />
+                            <button type="submit" className="btn" style={{marginTop: '15px'}}>
+                                로그인
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        function WriteModal({ onClose, onSubmit }) {
+            const [title, setTitle] = useState('');
+            const [content, setContent] = useState('');
+
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>새 글 작성</h2>
+                        <label>제목</label>
+                        <input 
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="제목을 입력하세요"
+                        />
+                        <label>내용</label>
+                        <textarea 
+                            value={content}
+                            onChange={(e) => setContent(e.target.value)}
+                            placeholder="내용을 입력하세요"
+                        />
+                        <button 
+                            className="btn" 
+                            onClick={() => onSubmit(title, content)}
+                            style={{marginTop: '15px'}}
+                        >
+                            게시
+                        </button>
+                        <button 
+                            className="btn btn-secondary" 
+                            onClick={onClose}
+                        >
+                            취소
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        function PostModal({ post, users, currentUser, ACCOUNTS, onClose, onComment }) {
+            const [commentContent, setCommentContent] = useState('');
+            const comments = post.comments ? Object.values(post.comments).sort((a, b) => a.timestamp - b.timestamp) : [];
+
+            const author = users[post.authorId];
+            const isRevealed = author?.isPubliclyRevealed || 
+                             (author?.revealedTo && author.revealedTo.includes(currentUser.userId));
+            const displayName = isRevealed 
+                ? `${post.nickname} (${ACCOUNTS[post.authorId]?.name})`
+                : post.nickname;
+
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>{post.title}</h2>
+                        <div className="post-meta" style={{marginBottom: '15px'}}>
+                            작성자: {displayName}
+                            {isRevealed && <span className="revealed-tag">정체공개</span>}
+                            <br />
+                            {new Date(post.timestamp).toLocaleString('ko-KR')}
+                        </div>
+                        <div className="post-content" style={{marginBottom: '20px'}}>
+                            {post.content}
+                        </div>
+
+                        <h3 style={{marginTop: '20px', marginBottom: '10px'}}>
+                            댓글 {comments.length}개
+                        </h3>
+                        {comments.map(comment => {
+                            const cAuthor = users[comment.authorId];
+                            const cIsRevealed = cAuthor?.isPubliclyRevealed || 
+                                              (cAuthor?.revealedTo && cAuthor.revealedTo.includes(currentUser.userId));
+                            const cDisplayName = cIsRevealed 
+                                ? `${comment.nickname} (${ACCOUNTS[comment.authorId]?.name})`
+                                : comment.nickname;
+
+                            return (
+                                <div key={comment.timestamp} className="comment">
+                                    <div style={{fontSize: '0.9rem', color: '#666', marginBottom: '5px'}}>
+                                        {cDisplayName}
+                                        {cIsRevealed && <span className="revealed-tag">정체공개</span>}
+                                        {' • '}
+                                        {new Date(comment.timestamp).toLocaleString('ko-KR')}
+                                    </div>
+                                    <div style={{color: '#aaa'}}>{comment.content}</div>
+                                </div>
+                            );
+                        })}
+
+                        <textarea 
+                            value={commentContent}
+                            onChange={(e) => setCommentContent(e.target.value)}
+                            placeholder="댓글을 입력하세요"
+                            style={{marginTop: '15px'}}
+                        />
+                        <button 
+                            className="btn" 
+                            onClick={() => {
+                                onComment(post.id, commentContent);
+                                setCommentContent('');
+                            }}
+                            style={{marginTop: '10px'}}
+                        >
+                            댓글 작성
+                        </button>
+                        <button 
+                            className="btn btn-secondary" 
+                            onClick={onClose}
+                        >
+                            닫기
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        function GuessModal({ users, currentUser, ACCOUNTS, onClose, onSubmit }) {
+            const [targetUser, setTargetUser] = useState('');
+            const guessTickets = users[currentUser.userId]?.guessTickets || 0;
+            const alreadyGuessed = users[currentUser.userId]?.alreadyGuessedCorrect || [];
+
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>누군가의 정체를 지목하기 🎯</h2>
+                        
+                        <div className="info-box">
+                            💡 보유 지목권: {guessTickets}개<br/>
+                            • 성공 시: 정체 공개 + 닉네임 변경권 2개 + 지목권 유지<br/>
+                            • 실패 시: 본인 정체 공개 + 지목권 1개 소모
+                        </div>
+                        
+                        <div className="warning-box">
+                            <h4>⚠ 주의!</h4>
+                            <ul style={{listStyle: 'none', padding: 0}}>
+                                <li>• 지목권은 2시간마다 1개씩 자동 지급됩니다</li>
+                                <li>• 성공하면 지목권이 소모되지 않습니다</li>
+                                <li>• 틀리면 당신의 정체가 모두에게 공개됩니다!</li>
+                                <li>• 이미 정체가 탄로난 사람은 닉네임 변경 전까지 지목 불가</li>
+                                <li>• 이미 맞춘 사람은 닉네임 변경 전까지 재지목 불가</li>
+                                <li>• 2시간마다 내가 알고 있는 정체 정보가 초기화됩니다</li>
+                            </ul>
+                        </div>
+
+                        <label>지목할 사람의 닉네임</label>
+                        <select value={targetUser} onChange={(e) => setTargetUser(e.target.value)}>
+                            <option value="">선택하세요</option>
+                            {Object.keys(users)
+                                .filter(uid => 
+                                    uid !== currentUser.userId && 
+                                    users[uid].nickname && 
+                                    users[uid].nickname.trim() !== '' &&
+                                    !users[uid].isPubliclyRevealed &&  // 정체가 탄로난 사람 제외
+                                    !alreadyGuessed.includes(uid)  // 이미 맞춘 사람 제외
+                                )
+                                .map(uid => (
+                                    <option key={uid} value={uid}>
+                                        {users[uid].nickname}
+                                    </option>
+                                ))
+                            }
+                        </select>
+                        
+                        {/* 지목 불가능한 사람들 표시 */}
+                        {(Object.keys(users).filter(uid => uid !== currentUser.userId && users[uid].isPubliclyRevealed).length > 0 ||
+                          alreadyGuessed.length > 0) && (
+                            <div style={{
+                                marginTop: '10px',
+                                padding: '10px',
+                                background: '#1a0a00',
+                                border: '1px solid #442200',
+                                borderRadius: '4px',
+                                fontSize: '0.85em',
+                                color: '#888'
+                            }}>
+                                {Object.keys(users).filter(uid => uid !== currentUser.userId && users[uid].isPubliclyRevealed).length > 0 && (
+                                    <>
+                                        💀 정체가 탄로나서 지목 불가:<br/>
+                                        {Object.keys(users)
+                                            .filter(uid => uid !== currentUser.userId && users[uid].isPubliclyRevealed)
+                                            .map(uid => users[uid].nickname)
+                                            .join(', ')}
+                                        <br/>
+                                    </>
+                                )}
+                                {alreadyGuessed.length > 0 && (
+                                    <>
+                                        ✅ 이미 맞춰서 지목 불가:<br/>
+                                        {alreadyGuessed
+                                            .filter(uid => users[uid]?.nickname)
+                                            .map(uid => users[uid].nickname)
+                                            .join(', ')}
+                                        <br/>
+                                    </>
+                                )}
+                                <span style={{color: '#aaa', fontSize: '0.9em'}}>
+                                    (닉네임 변경 시 다시 지목 가능)
+                                </span>
+                            </div>
+                        )}
+
+                        <label>이 사람의 실제 정체는?</label>
+                        <select id="guessSelect">
+                            <option value="">추측하세요</option>
+                            {Object.keys(ACCOUNTS).map(uid => (
+                                <option key={uid} value={uid}>
+                                    {ACCOUNTS[uid].name}
+                                </option>
+                            ))}
+                        </select>
+
+                        <button 
+                            className="btn btn-danger" 
+                            onClick={() => targetUser && onSubmit(targetUser)}
+                            style={{marginTop: '15px'}}
+                        >
+                            지목하기 (지목권 사용)
+                        </button>
+                        <button 
+                            className="btn btn-secondary" 
+                            onClick={onClose}
+                        >
+                            취소
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        function NicknameModal({ currentNickname, canChange, tickets, onClose, onSubmit }) {
+            const [nickname, setNickname] = useState(currentNickname || '');
+
+            return (
+                <div className="modal" onClick={currentNickname ? onClose : null}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>닉네임 {currentNickname ? '변경' : '설정'}</h2>
+                        
+                        {tickets > 0 && (
+                            <div className="info-box">
+                                🎫 보유한 변경권: {tickets}개<br/>
+                                시간 제한 없이 즉시 변경 가능합니다!
+                            </div>
+                        )}
+                        
+                        {!canChange && currentNickname && tickets === 0 && (
+                            <div className="warning-box">
+                                ⚠ 닉네임은 2시간마다 한 번만 변경할 수 있습니다!<br/>
+                                또는 지목에 성공하여 변경권을 획득하세요!
+                            </div>
+                        )}
+
+                        <label>닉네임</label>
+                        <input 
+                            type="text"
+                            value={nickname}
+                            onChange={(e) => setNickname(e.target.value)}
+                            placeholder="닉네임을 입력하세요"
+                            disabled={!canChange && currentNickname}
+                        />
+
+                        <button 
+                            className="btn" 
+                            onClick={() => onSubmit(nickname)}
+                            disabled={!canChange && currentNickname}
+                            style={{marginTop: '15px'}}
+                        >
+                            {currentNickname ? (tickets > 0 ? '변경 (변경권 사용)' : '변경') : '설정'}
+                        </button>
+                        {currentNickname && (
+                            <button 
+                                className="btn btn-secondary" 
+                                onClick={onClose}
+                            >
+                                취소
+                            </button>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function PasswordModal({ onClose, onSubmit }) {
+            const [currentPassword, setCurrentPassword] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>비밀번호 변경</h2>
+                        
+                        <div className="info-box">
+                            💡 새 비밀번호는 8자 이상이어야 합니다.
+                        </div>
+
+                        <label>현재 비밀번호</label>
+                        <input 
+                            type="password"
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            placeholder="현재 비밀번호"
+                        />
+
+                        <label>새 비밀번호</label>
+                        <input 
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="새 비밀번호 (8자 이상)"
+                        />
+
+                        <label>새 비밀번호 확인</label>
+                        <input 
+                            type="password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="새 비밀번호 확인"
+                        />
+
+                        <button 
+                            className="btn" 
+                            onClick={() => onSubmit(currentPassword, newPassword, confirmPassword)}
+                            style={{marginTop: '15px'}}
+                        >
+                            비밀번호 변경
+                        </button>
+                        <button 
+                            className="btn btn-secondary" 
+                            onClick={onClose}
+                        >
+                            취소
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
