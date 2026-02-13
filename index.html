@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anonymous Board</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; background: #fff; color: #000; min-height: 100vh; }
+        #splash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10000; animation: fadeOut 1s forwards; animation-delay: 1s; }
+        #splash img { width: 300px; height: auto; animation: glitch 0.3s infinite; }
+        #splash h1 { margin-top: 30px; font-size: 2.5em; letter-spacing: 5px; animation: flicker 1.5s infinite; color: #fff; }
+        @keyframes fadeOut { to { opacity: 0; visibility: hidden; } }
+        @keyframes glitch { 0%, 100% { transform: translate(0); } 20% { transform: translate(-2px, 2px); } 40% { transform: translate(-2px, -2px); } 60% { transform: translate(2px, 2px); } 80% { transform: translate(2px, -2px); } }
+        @keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        #root { opacity: 0; animation: fadeIn 1s forwards; animation-delay: 2s; }
+        @keyframes fadeIn { to { opacity: 1; } }
+        .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .card { background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; padding: 24px; margin-bottom: 20px; }
+        .btn { background: #333; color: #fff; border: 1px solid #000; padding: 12px 24px; border-radius: 4px; font-size: 1rem; cursor: pointer; transition: all 0.3s; width: 100%; font-family: 'Courier New', monospace; }
+        .btn:hover { background: #555; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: #999; border-color: #777; }
+        .btn-danger { background: #c00; border-color: #900; }
+        .btn-danger:hover { background: #e00; }
+        .btn-vote { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-color: #667eea; font-weight: bold; }
+        .btn-vote:hover { background: linear-gradient(135deg, #764ba2 0%, #667eea 100%); }
+        .btn-challenge { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-color: #f5576c; }
+        input, textarea, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; margin-top: 8px; font-family: 'Courier New', monospace; background: #fff; color: #000; }
+        input:focus, textarea:focus, select:focus { outline: none; border-color: #888; }
+        textarea { resize: vertical; min-height: 100px; }
+        .header { background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+        .header h1 { text-align: center; font-size: 2em; letter-spacing: 3px; margin-bottom: 5px; }
+        .header p { text-align: center; color: #666; font-size: 0.9em; margin-bottom: 15px; }
+        .header-buttons { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .vote-status { background: #e3f2fd; border: 1px solid #2196f3; padding: 15px; margin-bottom: 15px; border-radius: 4px; }
+        .vote-closed { background: #f5f5f5; border: 1px solid #999; }
+        .vote-active { background: #fff3cd; border: 1px solid #ffc107; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+        .challenge-notification { background: #ffe0e0; border: 2px solid #ff4444; padding: 15px; margin-bottom: 15px; border-radius: 4px; animation: shake 0.5s; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        @media (max-width: 600px) { .header-buttons { grid-template-columns: 1fr; } }
+        .post { background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 15px; cursor: pointer; transition: all 0.3s; }
+        .post:hover { border-color: #999; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .post-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 10px; color: #000; }
+        .post-meta { color: #666; font-size: 0.9rem; margin-bottom: 10px; }
+        .post-content { color: #333; line-height: 1.6; white-space: pre-wrap; }
+        .comment { background: #f0f0f0; border-left: 2px solid #999; padding: 15px; border-radius: 4px; margin-top: 10px; }
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+        .modal-content { background: #fff; border: 2px solid #333; border-radius: 8px; padding: 24px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .modal-content h2 { margin-bottom: 20px; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+        .info-box { background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; margin: 15px 0; border-radius: 4px; }
+        .warning-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 15px 0; border-radius: 4px; }
+        .revealed-tag { display: inline-block; background: #f88; color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 0.85rem; margin-left: 10px; }
+        .known-identity { background: #4caf50; color: #fff; padding: 8px 16px; border-radius: 4px; margin: 10px 5px 10px 0; display: inline-block; }
+        .login-container { max-width: 500px; margin: 100px auto; padding: 20px; }
+        .login-header { text-align: center; margin-bottom: 40px; }
+        .login-header h1 { font-size: 2em; letter-spacing: 3px; margin-bottom: 10px; }
+        .login-card { background: #f5f5f5; border: 2px solid #333; padding: 30px; border-radius: 8px; }
+        .login-card h2 { margin-bottom: 20px; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+        .login-card label { display: block; color: #666; margin: 15px 0 5px; }
+        label { display: block; color: #666; margin: 15px 0 5px; }
+        .vote-option { background: #fff; border: 2px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 4px; cursor: pointer; transition: all 0.3s; }
+        .vote-option:hover { border-color: #667eea; background: #f9f9f9; }
+        .vote-option.selected { border-color: #667eea; background: #e3f2fd; }
+        .poem-input { background: #fff; border: 2px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 4px; }
+        .challenge-card { background: #fff; border: 2px solid #f5576c; padding: 20px; margin: 15px 0; border-radius: 8px; }
+        .poem-display { background: #f9f9f9; border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div id="splash">
+        <img src="/mnt/user-data/uploads/1770935396330_image.png" alt="Anonymous">
+        <h1>WE ARE ANONYMOUS</h1>
+    </div>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const firebaseConfig = {
+            apiKey: "AIzaSyAwW-4r34LivVZAB3Z4PtB_5BFeLFfS1s",
+            authDomain: "ikmyeonggay.firebaseapp.com",
+            databaseURL: "https://ikmyeonggay-default-rtdb.firebaseio.com",
+            projectId: "ikmyeonggay",
+            storageBucket: "ikmyeonggay.firebasestorage.app",
+            messagingSenderId: "761175876587",
+            appId: "1:761175876587:web:48b062812fc20d75b36fae",
+            measurementId: "G-HDJB6TCZ2C"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        
+        const ACCOUNTS = {
+            'user1': { name: '강신우', password: btoa('Anon!2024#Kang') },
+            'user2': { name: '김대웅', password: btoa('Shad0w@Kim!24') },
+            'user3': { name: '김민기', password: btoa('Dark#Mind2024!') },
+            'user4': { name: '김민호', password: btoa('Gh0st$Minho@') },
+            'user5': { name: '송민수', password: btoa('Echo!Song#2024') },
+            'user6': { name: '손을웅', password: btoa('Cipher@Son!24') },
+            'user7': { name: '김명진', password: btoa('Wraith#Kim2024') },
+            'user8': { name: '김충연', password: btoa('Admin!@Ghost24') }
+        };
+        
+        const VOTE_TIMES = [
+            { hour: 11, minute: 0, name: '오전 투표' },
+            { hour: 22, minute: 0, name: '저녁 투표' }
+        ];
+
+        function App() {
+            const [currentUser, setCurrentUser] = useState(null);
+            const [users, setUsers] = useState({});
+            const [posts, setPosts] = useState([]);
+            const [challenges, setChallenges] = useState({});
+            const [showWriteModal, setShowWriteModal] = useState(false);
+            const [showPostModal, setShowPostModal] = useState(false);
+            const [showVoteModal, setShowVoteModal] = useState(false);
+            const [showNicknameVoteModal, setShowNicknameVoteModal] = useState(false);
+            const [showChallengeModal, setShowChallengeModal] = useState(false);
+            const [showPoemModal, setShowPoemModal] = useState(false);
+            const [showChallengeVoteModal, setShowChallengeVoteModal] = useState(false);
+            const [showNicknameModal, setShowNicknameModal] = useState(false);
+            const [showPasswordModal, setShowPasswordModal] = useState(false);
+            const [selectedPost, setSelectedPost] = useState(null);
+            const [selectedChallenge, setSelectedChallenge] = useState(null);
+            const [currentTime, setCurrentTime] = useState(Date.now());
+            const [voteStatus, setVoteStatus] = useState(null);
+            const [todayVotes, setTodayVotes] = useState({});
+            const [nicknameVotes, setNicknameVotes] = useState({});
+
+            useEffect(() => {
+                const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
+                return () => clearInterval(timer);
+            }, []);
+
+            useEffect(() => {
+                const userId = localStorage.getItem('userId');
+                if (userId && ACCOUNTS[userId]) {
+                    setCurrentUser({ userId, ...ACCOUNTS[userId] });
+                    loadUserData(userId);
+                }
+            }, []);
+
+            const loadUserData = (userId) => {
+                db.ref('users').on('value', snap => {
+                    const data = snap.val() || {};
+                    setUsers(data);
+                    if (data[userId]) {
+                        const lastDailyTicket = data[userId].lastDailyTicket || 0;
+                        const now = Date.now();
+                        const koreaTime = new Date(now + (9 * 60 * 60 * 1000));
+                        const todayMidnight = new Date(koreaTime.getFullYear(), koreaTime.getMonth(), koreaTime.getDate()).getTime() - (9 * 60 * 60 * 1000);
+                        if (lastDailyTicket < todayMidnight) {
+                            const currentTickets = data[userId].nicknameChangeTickets || 0;
+                            db.ref(`users/${userId}`).update({
+                                nicknameChangeTickets: currentTickets + 1,
+                                lastDailyTicket: now
+                            });
+                        }
+                    }
+                });
+                const today = new Date().toISOString().split('T')[0];
+                db.ref(`votes/${today}`).on('value', snap => setTodayVotes(snap.val() || {}));
+                db.ref(`nicknameVotes/${today}`).on('value', snap => setNicknameVotes(snap.val() || {}));
+                db.ref('challenges').on('value', snap => setChallenges(snap.val() || {}));
+            };
+
+            useEffect(() => {
+                db.ref('posts').on('value', snap => {
+                    const data = snap.val();
+                    if (data) {
+                        const arr = Object.keys(data).map(k => ({ id: k, ...data[k] })).sort((a, b) => b.timestamp - a.timestamp);
+                        setPosts(arr);
+                    } else {
+                        setPosts([]);
+                    }
+                });
+            }, []);
+
+            useEffect(() => {
+                const checkVoteStatus = () => {
+                    const now = new Date(currentTime + (9 * 60 * 60 * 1000));
+                    const currentHour = now.getUTCHours();
+                    const currentMinute = now.getUTCMinutes();
+                    let status = null;
+                    for (const voteTime of VOTE_TIMES) {
+                        const voteStartHour = voteTime.hour - 1;
+                        if ((currentHour === voteStartHour && currentMinute >= 0) || (currentHour === voteTime.hour && currentMinute < voteTime.minute)) {
+                            status = { name: voteTime.name, phase: 'voting', endTime: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), voteTime.hour, voteTime.minute)) };
+                            break;
+                        }
+                        if (currentHour === voteTime.hour && currentMinute === voteTime.minute) {
+                            status = { name: voteTime.name, phase: 'result', voteTime: voteTime };
+                            break;
+                        }
+                    }
+                    setVoteStatus(status);
+                };
+                checkVoteStatus();
+            }, [currentTime]);
+
+            useEffect(() => {
+                if (currentUser && users[currentUser.userId]) {
+                    if (!users[currentUser.userId].nickname) {
+                        setShowNicknameModal(true);
+                    }
+                }
+            }, [currentUser, users]);
+
+            const login = (userId, password, confirmText) => {
+                if (userId === 'user7' && confirmText !== '저는 김충연님의 개입니다.') {
+                    alert('올바른 확인 문구를 입력하세요.');
+                    return;
+                }
+                if (!ACCOUNTS[userId]) {
+                    alert('존재하지 않는 계정입니다!');
+                    return;
+                }
+                db.ref(`users/${userId}/password`).once('value').then(snap => {
+                    const savedPassword = snap.val() || ACCOUNTS[userId].password;
+                    if (savedPassword !== btoa(password)) {
+                        alert('비밀번호가 틀렸습니다!');
+                        return;
+                    }
+                    localStorage.setItem('userId', userId);
+                    setCurrentUser({ userId, ...ACCOUNTS[userId] });
+                    loadUserData(userId);
+                    db.ref(`users/${userId}`).once('value').then(snap => {
+                        if (!snap.val()) {
+                            return db.ref(`users/${userId}`).set({
+                                name: ACCOUNTS[userId].name,
+                                nickname: '',
+                                nicknameChangedAt: 0,
+                                nicknameChangeTickets: 1,
+                                lastDailyTicket: Date.now(),
+                                revealedIdentity: null,
+                                password: ACCOUNTS[userId].password
+                            }).then(() => setShowNicknameModal(true));
+                        } else {
+                            const updates = {};
+                            if (snap.val().nicknameChangeTickets === undefined) updates.nicknameChangeTickets = 1;
+                            if (snap.val().lastDailyTicket === undefined) updates.lastDailyTicket = Date.now();
+                            if (snap.val().revealedIdentity === undefined) updates.revealedIdentity = null;
+                            if (Object.keys(updates).length > 0) {
+                                db.ref(`users/${userId}`).update(updates);
+                            }
+                            if (!snap.val().nickname || snap.val().nickname === '') {
+                                setShowNicknameModal(true);
+                            }
+                        }
+                    });
+                });
+            };
+
+            const logout = () => {
+                localStorage.removeItem('userId');
+                setCurrentUser(null);
+            };
+
+            const canChangeNickname = () => {
+                if (!currentUser || !users[currentUser.userId]) return false;
+                const tickets = users[currentUser.userId].nicknameChangeTickets || 0;
+                return tickets > 0;
+            };
+
+            const changeNickname = (newNickname) => {
+                if (!newNickname.trim()) {
+                    alert('닉네임을 입력하세요!');
+                    return;
+                }
+                const isDuplicate = Object.keys(users).some(uid => uid !== currentUser.userId && users[uid].nickname === newNickname.trim());
+                if (isDuplicate) {
+                    alert('이미 사용 중인 닉네임입니다!');
+                    return;
+                }
+                const tickets = users[currentUser.userId].nicknameChangeTickets || 0;
+                const updates = {
+                    nickname: newNickname.trim(),
+                    nicknameChangedAt: Date.now(),
+                    nicknameChangeTickets: tickets - 1,
+                    revealedIdentity: null
+                };
+                db.ref(`users/${currentUser.userId}`).update(updates);
+                setShowNicknameModal(false);
+                alert(`닉네임이 변경되었습니다! (변경권 ${tickets - 1}개 남음)\n정체가 초기화되어 다시 익명 상태가 되었습니다!`);
+            };
+
+            const changePassword = (currentPassword, newPassword, confirmPassword) => {
+                db.ref(`users/${currentUser.userId}/password`).once('value').then(snap => {
+                    const savedPassword = snap.val() || ACCOUNTS[currentUser.userId].password;
+                    if (btoa(currentPassword) !== savedPassword) {
+                        alert('현재 비밀번호가 일치하지 않습니다!');
+                        return;
+                    }
+                    if (!newPassword || newPassword.length < 8) {
+                        alert('새 비밀번호는 8자 이상이어야 합니다!');
+                        return;
+                    }
+                    if (newPassword !== confirmPassword) {
+                        alert('새 비밀번호가 일치하지 않습니다!');
+                        return;
+                    }
+                    db.ref(`users/${currentUser.userId}`).update({ password: btoa(newPassword) }).then(() => {
+                        setShowPasswordModal(false);
+                        alert('비밀번호가 변경되었습니다!');
+                    });
+                });
+            };
+
+            const submitVote = (targetUserId) => {
+                if (!voteStatus || voteStatus.phase !== 'voting') {
+                    alert('현재 투표 시간이 아닙니다!');
+                    return;
+                }
+                const today = new Date().toISOString().split('T')[0];
+                const voteKey = `${today}_${voteStatus.name}`;
+                if (todayVotes[voteKey] && todayVotes[voteKey].voters && todayVotes[voteKey].voters[currentUser.userId]) {
+                    alert('이미 이번 투표에 참여하셨습니다!');
+                    return;
+                }
+                const votePath = `votes/${today}/${voteKey}`;
+                db.ref(votePath).once('value').then(snap => {
+                    const voteData = snap.val() || { votes: {}, voters: {} };
+                    voteData.votes[targetUserId] = (voteData.votes[targetUserId] || 0) + 1;
+                    voteData.voters[currentUser.userId] = { votedFor: targetUserId, timestamp: Date.now() };
+                    db.ref(votePath).set(voteData).then(() => {
+                        alert('투표가 완료되었습니다!');
+                        setShowVoteModal(false);
+                    });
+                });
+            };
+
+            const submitNicknameVote = (targetUserId) => {
+                const today = new Date().toISOString().split('T')[0];
+                if (nicknameVotes.voters && nicknameVotes.voters[currentUser.userId]) {
+                    alert('오늘은 이미 투표하셨습니다!');
+                    return;
+                }
+                const votePath = `nicknameVotes/${today}`;
+                db.ref(votePath).once('value').then(snap => {
+                    const voteData = snap.val() || { votes: {}, voters: {} };
+                    voteData.votes[targetUserId] = (voteData.votes[targetUserId] || 0) + 1;
+                    voteData.voters[currentUser.userId] = { votedFor: targetUserId, timestamp: Date.now() };
+                    db.ref(votePath).set(voteData).then(() => {
+                        alert('닉네임 투표가 완료되었습니다!');
+                        setShowNicknameVoteModal(false);
+                    });
+                });
+            };
+
+            const processVoteResult = () => {
+                const today = new Date().toISOString().split('T')[0];
+                const voteKey = `${today}_${voteStatus.name}`;
+                db.ref(`votes/${today}/${voteKey}`).once('value').then(snap => {
+                    const voteData = snap.val();
+                    if (!voteData || !voteData.votes) return;
+                    let maxVotes = 0;
+                    let winner = null;
+                    Object.keys(voteData.votes).forEach(userId => {
+                        if (voteData.votes[userId] > maxVotes) {
+                            maxVotes = voteData.votes[userId];
+                            winner = userId;
+                        }
+                    });
+                    if (winner) {
+                        db.ref(`users/${winner}`).update({ revealedIdentity: ACCOUNTS[winner].name });
+                        if (voteData.voters) {
+                            Object.keys(voteData.voters).forEach(voterId => {
+                                if (voteData.voters[voterId].votedFor === winner) {
+                                    db.ref(`users/${voterId}/nicknameChangeTickets`).once('value').then(s => {
+                                        const tickets = s.val() || 0;
+                                        db.ref(`users/${voterId}/nicknameChangeTickets`).set(tickets + 1);
+                                    });
+                                }
+                            });
+                        }
+                        alert(`투표 결과: ${users[winner]?.nickname || '???'}님이 가장 많은 표를 받았습니다!\n정체: ${ACCOUNTS[winner].name}`);
+                    }
+                });
+            };
+
+            // 대결 신청
+            const createChallenge = (targetUserId) => {
+                const targetNickname = users[targetUserId]?.nickname;
+                if (!targetNickname) {
+                    alert('상대방의 닉네임이 없습니다!');
+                    return;
+                }
+                const challengeId = Date.now().toString();
+                const theme = targetNickname.split('').slice(0, 3).join('');
+                db.ref(`challenges/${challengeId}`).set({
+                    challengerId: currentUser.userId,
+                    challengerNickname: users[currentUser.userId].nickname,
+                    defenderId: targetUserId,
+                    defenderNickname: targetNickname,
+                    targetNickname: targetNickname,
+                    theme: theme,
+                    status: 'pending',
+                    timestamp: Date.now()
+                }).then(() => {
+                    alert(`${targetNickname}님에게 닉네임 대결을 신청했습니다!`);
+                    setShowChallengeModal(false);
+                });
+            };
+
+            // 대결 수락
+            const acceptChallenge = (challengeId) => {
+                db.ref(`challenges/${challengeId}`).update({ status: 'accepted' });
+                alert('대결을 수락했습니다! 삼행시를 작성해주세요.');
+            };
+
+            // 대결 거절
+            const rejectChallenge = (challengeId) => {
+                db.ref(`challenges/${challengeId}`).remove();
+                alert('대결을 거절했습니다.');
+            };
+
+            // 삼행시 제출
+            const submitPoem = (challengeId, poem) => {
+                const challenge = challenges[challengeId];
+                const isChallenger = challenge.challengerId === currentUser.userId;
+                const field = isChallenger ? 'challengerPoem' : 'defenderPoem';
+                db.ref(`challenges/${challengeId}/${field}`).set(poem).then(() => {
+                    db.ref(`challenges/${challengeId}`).once('value').then(snap => {
+                        const data = snap.val();
+                        if (data.challengerPoem && data.defenderPoem) {
+                            db.ref(`challenges/${challengeId}`).update({ status: 'voting' });
+                        }
+                    });
+                    alert('삼행시가 제출되었습니다!');
+                    setShowPoemModal(false);
+                });
+            };
+
+            // 대결 투표
+            const voteChallenge = (challengeId, winner) => {
+                const votePath = `challenges/${challengeId}/votes/${currentUser.userId}`;
+                db.ref(votePath).set(winner).then(() => {
+                    alert('투표가 완료되었습니다!');
+                    setShowChallengeVoteModal(false);
+                });
+            };
+
+            // 대결 결과 처리
+            const processChallengeResult = (challengeId) => {
+                const challenge = challenges[challengeId];
+                if (!challenge.votes) {
+                    alert('아직 투표가 진행되지 않았습니다!');
+                    return;
+                }
+                const votes = challenge.votes;
+                let challengerVotes = 0;
+                let defenderVotes = 0;
+                Object.values(votes).forEach(vote => {
+                    if (vote === 'challenger') challengerVotes++;
+                    else defenderVotes++;
+                });
+                const winnerId = challengerVotes > defenderVotes ? challenge.challengerId : challenge.defenderId;
+                const loserId = winnerId === challenge.challengerId ? challenge.defenderId : challenge.challengerId;
+                const winnerNickname = users[winnerId].nickname;
+                
+                // 승자: 상대 닉네임 획득
+                db.ref(`users/${winnerId}`).update({ nickname: challenge.targetNickname });
+                
+                // 패자: 닉네임 제거 + 정체 공개
+                db.ref(`users/${loserId}`).update({ 
+                    nickname: '',
+                    revealedIdentity: ACCOUNTS[loserId].name 
+                });
+                
+                // 대결 완료 처리
+                db.ref(`challenges/${challengeId}`).update({ 
+                    status: 'completed',
+                    winner: winnerId
+                });
+                
+                alert(`대결 결과!\n승자: ${winnerNickname} (${challengerVotes > defenderVotes ? '도전자' : '수비자'})\n패자의 정체가 공개되었습니다!`);
+            };
+
+            const writePost = (title, content) => {
+                if (!title.trim() || !content.trim()) {
+                    alert('제목과 내용을 입력하세요!');
+                    return;
+                }
+                const currentNickname = users[currentUser.userId]?.nickname || '';
+                if (!currentNickname) {
+                    alert('닉네임을 먼저 설정해주세요!');
+                    setShowWriteModal(false);
+                    setShowNicknameModal(true);
+                    return;
+                }
+                const postId = Date.now().toString();
+                db.ref(`posts/${postId}`).set({
+                    authorId: currentUser.userId,
+                    nickname: currentNickname,
+                    title: title.trim(),
+                    content: content.trim(),
+                    timestamp: Date.now()
+                }).then(() => {
+                    setShowWriteModal(false);
+                    alert('게시글이 작성되었습니다!');
+                });
+            };
+
+            const writeComment = (postId, content) => {
+                if (!content.trim()) {
+                    alert('댓글 내용을 입력하세요!');
+                    return;
+                }
+                const currentNickname = users[currentUser.userId]?.nickname || '';
+                if (!currentNickname) {
+                    alert('닉네임을 먼저 설정해주세요!');
+                    setShowPostModal(false);
+                    setShowNicknameModal(true);
+                    return;
+                }
+                const commentId = Date.now().toString();
+                db.ref(`posts/${postId}/comments/${commentId}`).set({
+                    authorId: currentUser.userId,
+                    nickname: currentNickname,
+                    content: content.trim(),
+                    timestamp: Date.now()
+                });
+            };
+
+            const resetAllData = () => {
+                if (currentUser.userId !== 'user8') {
+                    alert('권한이 없습니다!');
+                    return;
+                }
+                if (!confirm('정말로 모든 데이터를 초기화하시겠습니까?')) return;
+                if (!confirm('이 작업은 되돌릴 수 없습니다!')) return;
+                db.ref('posts').remove();
+                db.ref('users').remove();
+                db.ref('votes').remove();
+                db.ref('challenges').remove();
+                alert('모든 데이터가 초기화되었습니다.');
+                logout();
+            };
+
+            const getNextVoteTime = () => {
+                const now = new Date(currentTime + (9 * 60 * 60 * 1000));
+                const currentHour = now.getUTCHours();
+                const currentMinute = now.getUTCMinutes();
+                for (const voteTime of VOTE_TIMES) {
+                    const voteStartHour = voteTime.hour - 1;
+                    if (currentHour < voteStartHour || (currentHour === voteStartHour && currentMinute < 0)) {
+                        return `${voteStartHour.toString().padStart(2, '0')}:00 (${voteTime.name} 시작)`;
+                    }
+                    if (currentHour === voteStartHour || (currentHour < voteTime.hour)) {
+                        return `투표 진행 중 (${voteTime.hour.toString().padStart(2, '0')}:00 마감)`;
+                    }
+                }
+                return `${(VOTE_TIMES[0].hour - 1).toString().padStart(2, '0')}:00 (내일 ${VOTE_TIMES[0].name})`;
+            };
+
+            if (!currentUser) {
+                return <LoginScreen onLogin={login} />;
+            }
+
+            const myNickname = users[currentUser.userId]?.nickname || '';
+            const nicknameTickets = users[currentUser.userId]?.nicknameChangeTickets || 0;
+            const revealedIdentity = users[currentUser.userId]?.revealedIdentity;
+
+            // 받은 대결 신청
+            const pendingChallenges = Object.keys(challenges).filter(id => 
+                challenges[id].defenderId === currentUser.userId && 
+                challenges[id].status === 'pending'
+            );
+
+            // 내가 작성해야 할 삼행시
+            const myPoemChallenges = Object.keys(challenges).filter(id => {
+                const c = challenges[id];
+                return c.status === 'accepted' && 
+                    ((c.challengerId === currentUser.userId && !c.challengerPoem) ||
+                     (c.defenderId === currentUser.userId && !c.defenderPoem));
+            });
+
+            // 투표 중인 대결
+            const votingChallenges = Object.keys(challenges).filter(id => 
+                challenges[id].status === 'voting' &&
+                challenges[id].challengerId !== currentUser.userId &&
+                challenges[id].defenderId !== currentUser.userId &&
+                (!challenges[id].votes || !challenges[id].votes[currentUser.userId])
+            );
+
+            return (
+                <div className="container">
+                    <div className="header">
+                        <h1>ANONYMOUS BOARD</h1>
+                        <p>We do not forgive. We do not forget. Expect us.</p>
+                        
+                        {pendingChallenges.length > 0 && (
+                            <div className="challenge-notification">
+                                <strong>⚔️ 닉네임 대결 신청이 {pendingChallenges.length}건 있습니다!</strong><br/>
+                                {pendingChallenges.map(id => {
+                                    const c = challenges[id];
+                                    return (
+                                        <div key={id} style={{marginTop: '10px'}}>
+                                            {c.challengerNickname}님이 당신의 닉네임 "{c.targetNickname}"를 노립니다!
+                                            <div style={{marginTop: '5px'}}>
+                                                <button className="btn" onClick={() => acceptChallenge(id)} style={{width: 'auto', marginRight: '10px'}}>수락</button>
+                                                <button className="btn btn-secondary" onClick={() => rejectChallenge(id)} style={{width: 'auto'}}>거절</button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {myPoemChallenges.length > 0 && (
+                            <div className="challenge-notification" style={{background: '#fff3cd', border: '2px solid #ffc107'}}>
+                                <strong>✍️ 삼행시를 작성해야 합니다!</strong><br/>
+                                {myPoemChallenges.map(id => {
+                                    const c = challenges[id];
+                                    return (
+                                        <div key={id} style={{marginTop: '10px'}}>
+                                            주제: "{c.theme}"
+                                            <button className="btn btn-challenge" onClick={() => {
+                                                setSelectedChallenge(id);
+                                                setShowPoemModal(true);
+                                            }} style={{marginTop: '5px'}}>삼행시 작성</button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <div className={`vote-status ${voteStatus ? (voteStatus.phase === 'voting' ? 'vote-active' : 'vote-closed') : 'vote-closed'}`}>
+                            {voteStatus ? (
+                                voteStatus.phase === 'voting' ? (
+                                    <div>
+                                        <strong>🗳 {voteStatus.name} 진행 중!</strong><br/>
+                                        투표 마감: {voteStatus.endTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Seoul' })}
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <strong>📊 투표가 종료되었습니다</strong><br/>
+                                        <button className="btn btn-vote" onClick={processVoteResult} style={{marginTop: '10px'}}>결과 확인</button>
+                                    </div>
+                                )
+                            ) : (
+                                <div>
+                                    <strong>💤 투표 대기 중</strong><br/>
+                                    다음 투표: {getNextVoteTime()}
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ background: '#f9f9f9', border: '1px solid #ddd', padding: '12px', marginBottom: '15px', borderRadius: '4px', textAlign: 'center' }}>
+                            <div style={{color: revealedIdentity ? '#c00' : '#090', fontWeight: 'bold'}}>
+                                {revealedIdentity ? `⚠ 당신의 정체가 공개되었습니다: ${revealedIdentity}` : `✓ 당신의 정체는 안전합니다 (실명: ${currentUser.name})`}
+                            </div>
+                            <div style={{color: '#666', fontSize: '0.9em', marginTop: '5px'}}>
+                                🎫 닉네임 변경권: {nicknameTickets}개 | 현재 닉네임: {myNickname || '없음'}
+                            </div>
+                        </div>
+
+                        <div className="header-buttons">
+                            <button className="btn" onClick={() => setShowNicknameModal(true)}>닉네임 변경</button>
+                            <button className="btn" onClick={() => setShowPasswordModal(true)}>비밀번호</button>
+                            <button className="btn btn-vote" onClick={() => setShowVoteModal(true)} disabled={!voteStatus || voteStatus.phase !== 'voting'}>
+                                {voteStatus && voteStatus.phase === 'voting' ? '정체 투표' : '투표 대기'}
+                            </button>
+                            <button className="btn btn-vote" onClick={() => setShowNicknameVoteModal(true)} disabled={nicknameVotes.voters && nicknameVotes.voters[currentUser.userId]} style={{background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'}}>
+                                {nicknameVotes.voters && nicknameVotes.voters[currentUser.userId] ? '투표 완료' : '닉네임 투표'}
+                            </button>
+                            <button className="btn btn-challenge" onClick={() => setShowChallengeModal(true)} disabled={!myNickname}>
+                                ⚔️ 대결 신청
+                            </button>
+                            <button className="btn btn-secondary" onClick={logout}>로그아웃</button>
+                        </div>
+                        
+                        {currentUser.userId === 'user8' && (
+                            <button className="btn btn-danger" onClick={resetAllData} style={{marginTop: '10px'}}>
+                                🗑 모든 데이터 초기화 (관리자)
+                            </button>
+                        )}
+                    </div>
+
+                    {votingChallenges.length > 0 && (
+                        <div className="card">
+                            <h3>🗳 대결 투표 진행 중</h3>
+                            {votingChallenges.map(id => {
+                                const c = challenges[id];
+                                return (
+                                    <div key={id} className="challenge-card">
+                                        <strong>{c.challengerNickname} vs {c.defenderNickname}</strong>
+                                        <button className="btn btn-vote" onClick={() => {
+                                            setSelectedChallenge(id);
+                                            setShowChallengeVoteModal(true);
+                                        }} style={{marginTop: '10px'}}>투표하기</button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    <button className="btn" onClick={() => setShowWriteModal(true)}>새 글 작성</button>
+
+                    <div>
+                        {posts.map(post => {
+                            const author = users[post.authorId];
+                            const displayName = author?.revealedIdentity ? `${post.nickname} (${author.revealedIdentity})` : post.nickname;
+                            const comments = post.comments ? Object.values(post.comments).sort((a, b) => a.timestamp - b.timestamp) : [];
+                            return (
+                                <div key={post.id} className="post" onClick={() => { setSelectedPost(post); setShowPostModal(true); }}>
+                                    <div className="post-title">{post.title}</div>
+                                    <div className="post-meta">
+                                        작성자: {displayName}
+                                        {author?.revealedIdentity && <span className="revealed-tag">정체공개</span>}
+                                        {' • '}{new Date(post.timestamp).toLocaleString('ko-KR')}
+                                    </div>
+                                    <div className="post-content">{post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content}</div>
+                                    {comments.length > 0 && (
+                                        <div style={{ marginTop: '15px', padding: '10px', background: '#f0f0f0', borderLeft: '2px solid #999', borderRadius: '4px' }}>
+                                            <div style={{color: '#666', fontSize: '0.9rem', marginBottom: '8px'}}>💬 댓글 {comments.length}개</div>
+                                            {comments.map(comment => {
+                                                const cAuthor = users[comment.authorId];
+                                                const cDisplayName = cAuthor?.revealedIdentity ? `${comment.nickname} (${cAuthor.revealedIdentity})` : comment.nickname;
+                                                return (
+                                                    <div key={comment.timestamp} style={{ color: '#555', fontSize: '0.85rem', padding: '5px 0', borderBottom: '1px solid #ddd' }}>
+                                                        <span style={{color: '#000', fontWeight: 'bold'}}>{cDisplayName}:</span> {comment.content.length > 50 ? comment.content.substring(0, 50) + '...' : comment.content}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {showWriteModal && <WriteModal onClose={() => setShowWriteModal(false)} onSubmit={writePost} />}
+                    {showPostModal && selectedPost && <PostModal post={selectedPost} users={users} currentUser={currentUser} ACCOUNTS={ACCOUNTS} onClose={() => setShowPostModal(false)} onComment={writeComment} />}
+                    {showVoteModal && <VoteModal users={users} currentUser={currentUser} voteStatus={voteStatus} todayVotes={todayVotes} onClose={() => setShowVoteModal(false)} onSubmit={submitVote} />}
+                    {showNicknameVoteModal && <NicknameVoteModal users={users} currentUser={currentUser} nicknameVotes={nicknameVotes} onClose={() => setShowNicknameVoteModal(false)} onSubmit={submitNicknameVote} />}
+                    {showChallengeModal && <ChallengeModal users={users} currentUser={currentUser} onClose={() => setShowChallengeModal(false)} onSubmit={createChallenge} />}
+                    {showPoemModal && selectedChallenge && <PoemModal challenge={challenges[selectedChallenge]} currentUser={currentUser} onClose={() => setShowPoemModal(false)} onSubmit={(poem) => submitPoem(selectedChallenge, poem)} />}
+                    {showChallengeVoteModal && selectedChallenge && <ChallengeVoteModal challenge={challenges[selectedChallenge]} onClose={() => setShowChallengeVoteModal(false)} onSubmit={(winner) => voteChallenge(selectedChallenge, winner)} onProcess={() => processChallengeResult(selectedChallenge)} />}
+                    {showNicknameModal && <NicknameModal currentNickname={myNickname} canChange={canChangeNickname()} tickets={nicknameTickets} onClose={() => myNickname ? setShowNicknameModal(false) : null} onSubmit={changeNickname} />}
+                    {showPasswordModal && <PasswordModal onClose={() => setShowPasswordModal(false)} onSubmit={changePassword} />}
+                </div>
+            );
+        }
+
+        function LoginScreen({ onLogin }) {
+            const [userId, setUserId] = useState('');
+            const [password, setPassword] = useState('');
+            const [confirmText, setConfirmText] = useState('');
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onLogin(userId, password, confirmText);
+            };
+            return (
+                <div className="login-container">
+                    <div className="login-header"><h1>ANONYMOUS LOGIN</h1></div>
+                    <div className="login-card">
+                        <h2>로그인</h2>
+                        <form onSubmit={handleSubmit}>
+                            <label>아이디</label>
+                            <input type="text" value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="아이디를 입력하세요" />
+                            <label>비밀번호</label>
+                            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호를 입력하세요" />
+                            {userId === 'user7' && (
+                                <>
+                                    <label style={{color: '#c00', fontWeight: 'bold'}}>확인 문구 (user7 전용)</label>
+                                    <input type="text" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="저는 김충연님의 개입니다." />
+                                </>
+                            )}
+                            <button type="submit" className="btn" style={{marginTop: '15px'}}>로그인</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        function WriteModal({ onClose, onSubmit }) {
+            const [title, setTitle] = useState('');
+            const [content, setContent] = useState('');
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>새 글 작성</h2>
+                        <label>제목</label>
+                        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목을 입력하세요" />
+                        <label>내용</label>
+                        <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="내용을 입력하세요" />
+                        <button className="btn" onClick={() => onSubmit(title, content)} style={{marginTop: '15px'}}>게시</button>
+                        <button className="btn btn-secondary" onClick={onClose}>취소</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function PostModal({ post, users, currentUser, ACCOUNTS, onClose, onComment }) {
+            const [commentContent, setCommentContent] = useState('');
+            const comments = post.comments ? Object.values(post.comments).sort((a, b) => a.timestamp - b.timestamp) : [];
+            const author = users[post.authorId];
+            const displayName = author?.revealedIdentity ? `${post.nickname} (${author.revealedIdentity})` : post.nickname;
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>{post.title}</h2>
+                        <div className="post-meta" style={{marginBottom: '15px'}}>
+                            작성자: {displayName}
+                            {author?.revealedIdentity && <span className="revealed-tag">정체공개</span>}
+                            <br />{new Date(post.timestamp).toLocaleString('ko-KR')}
+                        </div>
+                        <div className="post-content" style={{marginBottom: '20px'}}>{post.content}</div>
+                        <h3 style={{marginTop: '20px', marginBottom: '10px'}}>댓글 {comments.length}개</h3>
+                        {comments.map(comment => {
+                            const cAuthor = users[comment.authorId];
+                            const cDisplayName = cAuthor?.revealedIdentity ? `${comment.nickname} (${cAuthor.revealedIdentity})` : comment.nickname;
+                            return (
+                                <div key={comment.timestamp} className="comment">
+                                    <div style={{fontSize: '0.9rem', color: '#666', marginBottom: '5px'}}>
+                                        {cDisplayName}
+                                        {cAuthor?.revealedIdentity && <span className="revealed-tag">정체공개</span>}
+                                        {' • '}{new Date(comment.timestamp).toLocaleString('ko-KR')}
+                                    </div>
+                                    <div style={{color: '#000'}}>{comment.content}</div>
+                                </div>
+                            );
+                        })}
+                        <textarea value={commentContent} onChange={(e) => setCommentContent(e.target.value)} placeholder="댓글을 입력하세요" style={{marginTop: '15px'}} />
+                        <button className="btn" onClick={() => { onComment(post.id, commentContent); setCommentContent(''); }} style={{marginTop: '10px'}}>댓글 작성</button>
+                        <button className="btn btn-secondary" onClick={onClose}>닫기</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function VoteModal({ users, currentUser, voteStatus, todayVotes, onClose, onSubmit }) {
+            const [selectedUser, setSelectedUser] = useState('');
+            const today = new Date().toISOString().split('T')[0];
+            const voteKey = `${today}_${voteStatus?.name}`;
+            const hasVoted = todayVotes[voteKey] && todayVotes[voteKey].voters && todayVotes[voteKey].voters[currentUser.userId];
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>🗳 {voteStatus?.name}</h2>
+                        {hasVoted ? (
+                            <div className="info-box">✅ 이미 투표하셨습니다!<br/>투표 마감 후 결과를 확인하세요.</div>
+                        ) : (
+                            <>
+                                <div className="info-box">
+                                    <strong>가장 궁금한 사람의 정체는?</strong><br/><br/>
+                                    • 가장 많이 득표한 1명의 정체 공개<br/>
+                                    • 득표수는 비공개<br/>
+                                    • 다수결에 성공한 투표자들은 닉네임 변경권 1개 획득
+                                </div>
+                                <div className="warning-box">⚠ 투표는 무기명이며, 한 번만 가능합니다!</div>
+                                <label>투표할 사람을 선택하세요</label>
+                                {Object.keys(users).filter(uid => uid !== currentUser.userId && users[uid].nickname).map(uid => (
+                                    <div key={uid} className={`vote-option ${selectedUser === uid ? 'selected' : ''}`} onClick={() => setSelectedUser(uid)}>
+                                        <strong>{users[uid].nickname}</strong>
+                                        {users[uid].revealedIdentity && <span style={{color: '#c00', marginLeft: '10px'}}>({users[uid].revealedIdentity})</span>}
+                                    </div>
+                                ))}
+                                <button className="btn btn-vote" onClick={() => selectedUser && onSubmit(selectedUser)} disabled={!selectedUser} style={{marginTop: '15px'}}>투표하기</button>
+                            </>
+                        )}
+                        <button className="btn btn-secondary" onClick={onClose}>닫기</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function NicknameVoteModal({ users, currentUser, nicknameVotes, onClose, onSubmit }) {
+            const [selectedUser, setSelectedUser] = useState('');
+            const hasVoted = nicknameVotes.voters && nicknameVotes.voters[currentUser.userId];
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>💝 닉네임 인기 투표</h2>
+                        {hasVoted ? (
+                            <div className="info-box">✅ 오늘은 이미 투표하셨습니다!<br/>내일 자정에 결과가 집계됩니다.</div>
+                        ) : (
+                            <>
+                                <div className="info-box">
+                                    <strong>마음에 드는 닉네임에 투표하세요!</strong><br/><br/>
+                                    • 하루에 한 번 투표 가능<br/>
+                                    • 자신을 제외한 닉네임 중 선택<br/>
+                                    • 가장 많은 득표를 받은 사람은 닉네임 변경권 1개 획득<br/>
+                                    • 자정에 자동 집계
+                                </div>
+                                <div className="warning-box">💡 창의적이고 재미있는 닉네임을 선택해보세요!</div>
+                                <label>투표할 닉네임을 선택하세요</label>
+                                {Object.keys(users).filter(uid => uid !== currentUser.userId && users[uid].nickname).map(uid => (
+                                    <div key={uid} className={`vote-option ${selectedUser === uid ? 'selected' : ''}`} onClick={() => setSelectedUser(uid)}>
+                                        <strong>{users[uid].nickname}</strong>
+                                        {users[uid].revealedIdentity && <span style={{color: '#c00', marginLeft: '10px'}}>({users[uid].revealedIdentity})</span>}
+                                    </div>
+                                ))}
+                                <button className="btn btn-vote" onClick={() => selectedUser && onSubmit(selectedUser)} disabled={!selectedUser} style={{marginTop: '15px', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'}}>투표하기</button>
+                            </>
+                        )}
+                        <button className="btn btn-secondary" onClick={onClose}>닫기</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function ChallengeModal({ users, currentUser, onClose, onSubmit }) {
+            const [selectedUser, setSelectedUser] = useState('');
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>⚔️ 닉네임 대결 신청</h2>
+                        <div className="info-box">
+                            <strong>누군가의 닉네임을 빼앗으세요!</strong><br/><br/>
+                            • 상대방의 닉네임을 주제로 삼행시 대결<br/>
+                            • 관객 투표로 승부 결정<br/>
+                            • 승자: 상대 닉네임 획득<br/>
+                            • 패자: 닉네임 상실 + 정체 공개
+                        </div>
+                        <div className="warning-box">⚠ 신중하게 선택하세요! 패배하면 모든 것을 잃습니다!</div>
+                        <label>대결을 신청할 상대를 선택하세요</label>
+                        {Object.keys(users).filter(uid => uid !== currentUser.userId && users[uid].nickname && !users[uid].revealedIdentity).map(uid => (
+                            <div key={uid} className={`vote-option ${selectedUser === uid ? 'selected' : ''}`} onClick={() => setSelectedUser(uid)}>
+                                <strong>{users[uid].nickname}</strong>
+                            </div>
+                        ))}
+                        <button className="btn btn-challenge" onClick={() => selectedUser && onSubmit(selectedUser)} disabled={!selectedUser} style={{marginTop: '15px'}}>대결 신청</button>
+                        <button className="btn btn-secondary" onClick={onClose}>취소</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function PoemModal({ challenge, currentUser, onClose, onSubmit }) {
+            const [line1, setLine1] = useState('');
+            const [line2, setLine2] = useState('');
+            const [line3, setLine3] = useState('');
+            const theme = challenge.theme.split('');
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>✍️ 삼행시 작성</h2>
+                        <div className="info-box">
+                            <strong>주제: {challenge.theme}</strong><br/>
+                            각 글자로 시작하는 문장을 작성하세요!
+                        </div>
+                        <label>{theme[0]}...</label>
+                        <input className="poem-input" value={line1} onChange={(e) => setLine1(e.target.value)} placeholder={`${theme[0]}로 시작하는 문장`} />
+                        <label>{theme[1]}...</label>
+                        <input className="poem-input" value={line2} onChange={(e) => setLine2(e.target.value)} placeholder={`${theme[1]}로 시작하는 문장`} />
+                        <label>{theme[2]}...</label>
+                        <input className="poem-input" value={line3} onChange={(e) => setLine3(e.target.value)} placeholder={`${theme[2]}로 시작하는 문장`} />
+                        <button className="btn btn-challenge" onClick={() => onSubmit([line1, line2, line3])} disabled={!line1 || !line2 || !line3} style={{marginTop: '15px'}}>제출</button>
+                        <button className="btn btn-secondary" onClick={onClose}>취소</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function ChallengeVoteModal({ challenge, onClose, onSubmit, onProcess }) {
+            const [selectedWinner, setSelectedWinner] = useState('');
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>🗳 대결 투표</h2>
+                        <div className="info-box">
+                            <strong>주제: {challenge.theme}</strong><br/>
+                            더 나은 삼행시를 선택하세요!
+                        </div>
+                        <div className="poem-display">
+                            <strong>{challenge.challengerNickname} (도전자)</strong>
+                            {challenge.challengerPoem && challenge.challengerPoem.map((line, i) => (
+                                <div key={i}>{line}</div>
+                            ))}
+                            <button className={`btn ${selectedWinner === 'challenger' ? 'btn-vote' : 'btn-secondary'}`} onClick={() => setSelectedWinner('challenger')} style={{marginTop: '10px'}}>
+                                {selectedWinner === 'challenger' ? '✓ 선택됨' : '이 작품에 투표'}
+                            </button>
+                        </div>
+                        <div className="poem-display">
+                            <strong>{challenge.defenderNickname} (수비자)</strong>
+                            {challenge.defenderPoem && challenge.defenderPoem.map((line, i) => (
+                                <div key={i}>{line}</div>
+                            ))}
+                            <button className={`btn ${selectedWinner === 'defender' ? 'btn-vote' : 'btn-secondary'}`} onClick={() => setSelectedWinner('defender')} style={{marginTop: '10px'}}>
+                                {selectedWinner === 'defender' ? '✓ 선택됨' : '이 작품에 투표'}
+                            </button>
+                        </div>
+                        <button className="btn btn-vote" onClick={() => onSubmit(selectedWinner)} disabled={!selectedWinner} style={{marginTop: '15px'}}>투표 완료</button>
+                        <button className="btn btn-danger" onClick={onProcess} style={{marginTop: '10px'}}>결과 처리 (관리자)</button>
+                        <button className="btn btn-secondary" onClick={onClose}>닫기</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function NicknameModal({ currentNickname, canChange, tickets, onClose, onSubmit }) {
+            const [nickname, setNickname] = useState(currentNickname || '');
+            return (
+                <div className="modal" onClick={currentNickname ? onClose : null}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>닉네임 {currentNickname ? '변경' : '설정'}</h2>
+                        {tickets > 0 ? (
+                            <div className="info-box">🎫 보유한 변경권: {tickets}개<br/>변경권을 사용하여 즉시 변경 가능합니다!</div>
+                        ) : (
+                            <div className="warning-box">⚠ 닉네임 변경권이 없습니다!<br/>매일 자정에 1개씩 지급됩니다.</div>
+                        )}
+                        <label>닉네임</label>
+                        <input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="닉네임을 입력하세요" disabled={!canChange && currentNickname} />
+                        <button className="btn" onClick={() => onSubmit(nickname)} disabled={!canChange && currentNickname} style={{marginTop: '15px'}}>
+                            {currentNickname ? '변경 (변경권 1개 사용)' : '설정'}
+                        </button>
+                        {currentNickname && <button className="btn btn-secondary" onClick={onClose}>취소</button>}
+                    </div>
+                </div>
+            );
+        }
+
+        function PasswordModal({ onClose, onSubmit }) {
+            const [currentPassword, setCurrentPassword] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2>비밀번호 변경</h2>
+                        <div className="info-box">💡 새 비밀번호는 8자 이상이어야 합니다.</div>
+                        <label>현재 비밀번호</label>
+                        <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="현재 비밀번호" />
+                        <label>새 비밀번호</label>
+                        <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="새 비밀번호 (8자 이상)" />
+                        <label>새 비밀번호 확인</label>
+                        <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="새 비밀번호 확인" />
+                        <button className="btn" onClick={() => onSubmit(currentPassword, newPassword, confirmPassword)} style={{marginTop: '15px'}}>비밀번호 변경</button>
+                        <button className="btn btn-secondary" onClick={onClose}>취소</button>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
