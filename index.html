@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>해우소 - 근심을 풀어놓는 곳</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Nanum Myeongjo', 'Noto Serif KR', serif; 
+            background: linear-gradient(to bottom, #8b7355 0%, #5d4a3a 100%);
+            color: #3e2723; 
+            min-height: 100vh;
+        }
+        .wood-texture {
+            background-image: 
+                repeating-linear-gradient(90deg, rgba(139,115,85,0.1) 0px, transparent 2px, transparent 4px, rgba(139,115,85,0.1) 6px),
+                linear-gradient(to bottom, #d4a574 0%, #a67c52 50%, #8b6f47 100%);
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .header { 
+            background: linear-gradient(to bottom, #d4a574 0%, #a67c52 100%);
+            border: 4px solid #6d4c41;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255,255,255,0.3);
+            position: relative;
+            text-align: center;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(93,74,58,0.1) 3px, rgba(93,74,58,0.1) 6px);
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        .header h1 { 
+            font-size: 3rem; 
+            font-weight: 700; 
+            margin-bottom: 10px; 
+            color: #3e2723;
+            text-shadow: 2px 2px 4px rgba(255,255,255,0.3);
+            letter-spacing: 8px;
+        }
+        .header p { 
+            color: #5d4a3a; 
+            font-size: 1.1rem; 
+            font-style: italic;
+        }
+        .tab-container { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab { 
+            flex: 1; 
+            padding: 15px; 
+            background: linear-gradient(to bottom, #d4a574 0%, #a67c52 100%);
+            border: 3px solid #6d4c41;
+            border-radius: 8px;
+            cursor: pointer; 
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            color: #3e2723;
+        }
+        .tab:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+        }
+        .tab.active { 
+            background: linear-gradient(to bottom, #6d4c41 0%, #5d4a3a 100%);
+            color: #d4a574;
+            box-shadow: inset 0 4px 8px rgba(0,0,0,0.4);
+        }
+        .btn { 
+            background: linear-gradient(to bottom, #8b6f47 0%, #6d4c41 100%);
+            color: #f5f5dc; 
+            border: 2px solid #5d4a3a;
+            padding: 12px 24px; 
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer; 
+            transition: all 0.2s;
+            width: 100%; 
+            font-weight: 600;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .btn:hover { 
+            background: linear-gradient(to bottom, #6d4c41 0%, #5d4a3a 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+        }
+        .btn-secondary { background: linear-gradient(to bottom, #a67c52 0%, #8b6f47 100%); }
+        .btn-secondary:hover { background: linear-gradient(to bottom, #8b6f47 0%, #6d4c41 100%); }
+        input, textarea { 
+            width: 100%; 
+            padding: 12px; 
+            border: 2px solid #8b6f47;
+            border-radius: 6px;
+            font-size: 1rem;
+            margin-top: 8px; 
+            background: #faf8f3;
+            color: #3e2723;
+            font-family: 'Nanum Myeongjo', serif;
+        }
+        input:focus, textarea:focus { 
+            outline: none; 
+            border-color: #6d4c41;
+            background: #fff;
+        }
+        textarea { resize: vertical; min-height: 120px; }
+        .post { 
+            background: linear-gradient(to bottom, #faf8f3 0%, #f5f0e8 100%);
+            border: 3px solid #8b6f47;
+            border-radius: 10px;
+            padding: 20px; 
+            margin-bottom: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .post-author { 
+            font-size: 0.9rem; 
+            color: #6d4c41; 
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .post-title { 
+            font-size: 1.3rem; 
+            font-weight: 700; 
+            margin-bottom: 10px; 
+            color: #3e2723;
+        }
+        .post-content { 
+            color: #5d4a3a; 
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+        .post-meta { 
+            color: #8b7355; 
+            font-size: 0.85rem; 
+            font-style: italic;
+        }
+        .comment { 
+            background: #f5f0e8;
+            border-left: 4px solid #8b6f47;
+            padding: 12px; 
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+        .comment-author {
+            font-size: 0.85rem;
+            color: #6d4c41;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .modal { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            right: 0; 
+            bottom: 0; 
+            background: rgba(62,39,35,0.7);
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            z-index: 1000; 
+            padding: 20px;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content { 
+            background: linear-gradient(to bottom, #faf8f3 0%, #f5f0e8 100%);
+            border: 4px solid #6d4c41;
+            border-radius: 12px;
+            padding: 30px; 
+            max-width: 600px; 
+            width: 100%; 
+            max-height: 85vh; 
+            overflow-y: auto;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+        }
+        .modal-content h2 { 
+            margin-bottom: 20px; 
+            font-size: 1.8rem; 
+            font-weight: 700; 
+            color: #3e2723;
+            border-bottom: 3px solid #8b6f47;
+            padding-bottom: 10px;
+        }
+        label { 
+            display: block; 
+            color: #5d4a3a; 
+            margin: 15px 0 5px; 
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        .travel-link {
+            background: linear-gradient(to bottom, #faf8f3 0%, #f5f0e8 100%);
+            border: 3px solid #8b6f47;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .travel-link:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+            border-color: #6d4c41;
+        }
+        .travel-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #3e2723;
+            margin-bottom: 8px;
+        }
+        .travel-desc {
+            color: #5d4a3a;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        @media (max-width: 600px) {
+            .header h1 { font-size: 2rem; letter-spacing: 4px; }
+            .tab { font-size: 0.95rem; padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const firebaseConfig = {
+            apiKey: "AIzaSyAwW-4r34LivVZAB3Z4PtB_5BFeLFfS1s",
+            authDomain: "ikmyeonggay.firebaseapp.com",
+            databaseURL: "https://ikmyeonggay-default-rtdb.firebaseio.com",
+            projectId: "ikmyeonggay",
+            storageBucket: "ikmyeonggay.firebasestorage.app",
+            messagingSenderId: "761175876587",
+            appId: "1:761175876587:web:48b062812fc20d75b36fae",
+            measurementId: "G-HDJB6TCZ2C"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const TRAVEL_SITES = [
+            {
+                title: '✈️ 스카이스캐너',
+                desc: '전 세계 항공권 최저가 검색 - 여러 항공사 가격을 한눈에 비교',
+                url: 'https://www.skyscanner.co.kr'
+            },
+            {
+                title: '🏨 부킹닷컴',
+                desc: '전 세계 숙박 예약 - 호텔, 리조트, 게스트하우스',
+                url: 'https://www.booking.com'
+            },
+            {
+                title: '🏠 에어비앤비',
+                desc: '독특한 숙소와 현지 체험 - 집 전체, 개인실',
+                url: 'https://www.airbnb.co.kr'
+            },
+            {
+                title: '🎫 클룩',
+                desc: '전 세계 액티비티 & 투어 예약 - 입장권, 체험',
+                url: 'https://www.klook.com/ko'
+            },
+            {
+                title: '🚗 렌터카',
+                desc: '해외 렌터카 비교 예약 - 공항 픽업, 장기 할인',
+                url: 'https://www.rentalcars.com/ko'
+            },
+            {
+                title: '🗺️ 구글 지도',
+                desc: '여행지 검색 및 경로 찾기 - 리뷰, 사진',
+                url: 'https://www.google.com/maps'
+            },
+            {
+                title: '📱 트립어드바이저',
+                desc: '여행자 리뷰 및 추천 - 맛집, 관광지',
+                url: 'https://www.tripadvisor.co.kr'
+            },
+            {
+                title: '💳 하나은행 환율',
+                desc: '실시간 환율 확인 및 환전 - 우대율 적용',
+                url: 'https://www.kebhana.com/cont/mall/mall15/mall1501/index.jsp'
+            }
+        ];
+
+        function App() {
+            const [posts, setPosts] = useState([]);
+            const [currentTab, setCurrentTab] = useState('board');
+            const [showWriteModal, setShowWriteModal] = useState(false);
+
+            useEffect(() => {
+                db.ref('hawooso_posts').on('value', snap => {
+                    const data = snap.val();
+                    if (data) {
+                        const arr = Object.keys(data).map(k => ({ id: k, ...data[k] })).sort((a, b) => b.timestamp - a.timestamp);
+                        setPosts(arr);
+                    } else {
+                        setPosts([]);
+                    }
+                });
+            }, []);
+
+            const writePost = (author, title, content) => {
+                if (!author.trim() || !title.trim() || !content.trim()) {
+                    alert('작성자, 제목, 내용을 모두 입력하세요!');
+                    return;
+                }
+                const postId = Date.now().toString();
+                db.ref(`hawooso_posts/${postId}`).set({
+                    author: author.trim(),
+                    title: title.trim(),
+                    content: content.trim(),
+                    timestamp: Date.now()
+                }).then(() => {
+                    setShowWriteModal(false);
+                    alert('글이 작성되었습니다!');
+                });
+            };
+
+            const writeComment = (postId, author, content) => {
+                if (!author.trim() || !content.trim()) {
+                    alert('작성자와 댓글 내용을 입력하세요!');
+                    return;
+                }
+                const commentId = Date.now().toString();
+                db.ref(`hawooso_posts/${postId}/comments/${commentId}`).set({
+                    author: author.trim(),
+                    content: content.trim(),
+                    timestamp: Date.now()
+                });
+            };
+
+            return (
+                <div className="container">
+                    <div className="header wood-texture">
+                        <h1>解憂所</h1>
+                        <p>근심을 풀어놓는 곳</p>
+                    </div>
+
+                    <div className="tab-container">
+                        <button className={`tab ${currentTab === 'board' ? 'active' : ''}`} onClick={() => setCurrentTab('board')}>
+                            📝 자유게시판
+                        </button>
+                        <button className={`tab ${currentTab === 'travel' ? 'active' : ''}`} onClick={() => setCurrentTab('travel')}>
+                            ✈️ 여행 사이트
+                        </button>
+                    </div>
+
+                    {currentTab === 'board' && (
+                        <>
+                            <button className="btn" onClick={() => setShowWriteModal(true)} style={{marginBottom: '20px'}}>
+                                ✍️ 새 글 작성
+                            </button>
+                            <div>
+                                {posts.map(post => (
+                                    <PostCard 
+                                        key={post.id} 
+                                        post={post} 
+                                        onComment={writeComment}
+                                    />
+                                ))}
+                                {posts.length === 0 && (
+                                    <div style={{textAlign: 'center', padding: '60px 20px', color: '#8b7355'}}>
+                                        <p style={{fontSize: '1.2rem'}}>아직 작성된 글이 없습니다.</p>
+                                        <p style={{marginTop: '10px'}}>첫 번째 글을 작성해보세요!</p>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+
+                    {currentTab === 'travel' && (
+                        <div>
+                            <div style={{marginBottom: '20px', padding: '20px', background: 'rgba(250,248,243,0.9)', borderRadius: '10px', border: '2px solid #8b6f47'}}>
+                                <h3 style={{color: '#3e2723', marginBottom: '10px', fontSize: '1.3rem'}}>🧳 여행 준비에 유용한 사이트</h3>
+                                <p style={{color: '#5d4a3a', lineHeight: '1.6'}}>
+                                    항공권부터 숙소, 액티비티까지 한 곳에서!<br/>
+                                    사이트를 클릭하면 새 창으로 이동합니다.
+                                </p>
+                            </div>
+                            {TRAVEL_SITES.map((site, index) => (
+                                <div 
+                                    key={index}
+                                    className="travel-link"
+                                    onClick={() => window.open(site.url, '_blank')}
+                                >
+                                    <div className="travel-title">{site.title}</div>
+                                    <div className="travel-desc">{site.desc}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {showWriteModal && <WriteModal onClose={() => setShowWriteModal(false)} onSubmit={writePost} />}
+                </div>
+            );
+        }
+
+        function PostCard({ post, onComment }) {
+            const [commentAuthor, setCommentAuthor] = useState('');
+            const [commentContent, setCommentContent] = useState('');
+            const comments = post.comments ? Object.values(post.comments).sort((a, b) => a.timestamp - b.timestamp) : [];
+            
+            const handleCommentSubmit = () => {
+                if (commentAuthor.trim() && commentContent.trim()) {
+                    onComment(post.id, commentAuthor, commentContent);
+                    setCommentAuthor('');
+                    setCommentContent('');
+                }
+            };
+
+            return (
+                <div className="post">
+                    <div className="post-author">✒️ {post.author}</div>
+                    <div className="post-title">{post.title}</div>
+                    <div className="post-content">{post.content}</div>
+                    <div className="post-meta">
+                        🕰️ {new Date(post.timestamp).toLocaleString('ko-KR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}
+                    </div>
+                    
+                    <div style={{marginTop: '20px', paddingTop: '15px', borderTop: '2px solid #d4a574'}}>
+                        <strong style={{fontSize: '1rem', color: '#5d4a3a'}}>💬 댓글 {comments.length}개</strong>
+                        {comments.map(comment => (
+                            <div key={comment.timestamp} className="comment">
+                                <div className="comment-author">✒️ {comment.author}</div>
+                                <div style={{color: '#3e2723', lineHeight: '1.6'}}>{comment.content}</div>
+                                <div style={{fontSize: '0.8rem', color: '#8b7355', marginTop: '4px', fontStyle: 'italic'}}>
+                                    {new Date(comment.timestamp).toLocaleString('ko-KR', {
+                                        month: 'long',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                        <div style={{marginTop: '15px'}}>
+                            <input 
+                                type="text"
+                                value={commentAuthor}
+                                onChange={(e) => setCommentAuthor(e.target.value)}
+                                placeholder="작성자 이름"
+                                style={{marginBottom: '8px'}}
+                            />
+                            <textarea 
+                                value={commentContent}
+                                onChange={(e) => setCommentContent(e.target.value)}
+                                placeholder="댓글을 남겨주세요..."
+                                style={{minHeight: '80px'}}
+                            />
+                            <button className="btn" onClick={handleCommentSubmit} style={{marginTop: '10px'}}>
+                                💬 댓글 남기기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function WriteModal({ onClose, onSubmit }) {
+            const [author, setAuthor] = useState('');
+            const [title, setTitle] = useState('');
+            const [content, setContent] = useState('');
+            
+            return (
+                <div className="modal" onClick={onClose}>
+                    <div className="modal-content wood-texture" onClick={(e) => e.stopPropagation()}>
+                        <h2>✍️ 새 글 작성</h2>
+                        <label>작성자</label>
+                        <input 
+                            type="text" 
+                            value={author} 
+                            onChange={(e) => setAuthor(e.target.value)} 
+                            placeholder="이름을 입력하세요"
+                        />
+                        <label>제목</label>
+                        <input 
+                            type="text" 
+                            value={title} 
+                            onChange={(e) => setTitle(e.target.value)} 
+                            placeholder="제목을 입력하세요"
+                        />
+                        <label>내용</label>
+                        <textarea 
+                            value={content} 
+                            onChange={(e) => setContent(e.target.value)} 
+                            placeholder="하고 싶은 이야기를 자유롭게 적어주세요..."
+                            style={{minHeight: '200px'}}
+                        />
+                        <button className="btn" onClick={() => onSubmit(author, title, content)} style={{marginTop: '20px'}}>
+                            📮 글 올리기
+                        </button>
+                        <button className="btn btn-secondary" onClick={onClose} style={{marginTop: '10px'}}>
+                            🚪 취소
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
